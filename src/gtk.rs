@@ -15,8 +15,11 @@ unsafe extern "C" {
     pub fn gtk_widget_set_visible(w: Widget, b: c_int);
     pub fn gtk_widget_grab_focus(w: Widget) -> c_int;
     pub fn gtk_widget_get_first_child(w: Widget) -> Widget;
+    #[cfg(test)]
+    pub fn gtk_widget_get_next_sibling(w: Widget) -> Widget;
     pub fn gtk_widget_add_css_class(w: Widget, class: *const c_char);
     pub fn gtk_widget_set_hexpand(w: Widget, b: c_int);
+    pub fn gtk_widget_set_tooltip_text(w: Widget, text: *const c_char);
     pub fn gtk_box_new(orientation: c_int, spacing: c_int) -> Widget;
     pub fn gtk_box_append(w: Widget, child: Widget);
     pub fn gtk_entry_set_max_length(w: Widget, max: i32);
@@ -29,6 +32,10 @@ unsafe extern "C" {
     pub fn gtk_label_set_text(w: Widget, text: *const c_char);
     pub fn gtk_label_set_xalign(w: Widget, x: f32);
     pub fn gtk_label_set_ellipsize(w: Widget, mode: c_int);
+    pub fn gtk_label_set_wrap(w: Widget, wrap: c_int);
+    pub fn gtk_label_set_mnemonic_widget(w: Widget, target: Widget);
+    pub fn gtk_check_button_new_with_label(text: *const c_char) -> Widget;
+    pub fn gtk_check_button_set_active(w: Widget, active: c_int);
     pub fn gtk_list_box_new() -> Widget;
     pub fn gtk_list_box_append(w: Widget, child: Widget);
     pub fn gtk_list_box_remove(w: Widget, child: Widget);

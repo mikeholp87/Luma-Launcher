@@ -15,6 +15,7 @@ pub struct Config {
     pub width: i32,
     pub results: usize,
     pub compact: bool,
+    pub show_settings_button: bool,
     pub history: bool,
     pub descriptions: bool,
     pub fuzzy: bool,
@@ -33,6 +34,7 @@ impl Default for Config {
             width: 680,
             results: 8,
             compact: false,
+            show_settings_button: false,
             history: true,
             descriptions: true,
             fuzzy: true,
@@ -179,6 +181,29 @@ pub fn autostart_entry(executable: &Path) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn settings_button_is_opt_in_and_preference_round_trips() {
+        assert!(!Config::default().show_settings_button);
+        assert!(
+            !toml::from_str::<Config>("theme = 'light'")
+                .unwrap()
+                .show_settings_button
+        );
+        for show_settings_button in [true, false] {
+            let config = Config {
+                show_settings_button,
+                ..Config::default()
+            };
+            let saved = toml::to_string(&config).unwrap();
+            assert_eq!(
+                toml::from_str::<Config>(&saved)
+                    .unwrap()
+                    .show_settings_button,
+                show_settings_button
+            );
+        }
+    }
+
     #[test]
     fn config_validation() {
         assert!(Config::default().validate().is_ok());

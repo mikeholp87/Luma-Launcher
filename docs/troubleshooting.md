@@ -14,6 +14,18 @@
   Retry registration in Settings after a failure, closure, or timeout. Never remove unrelated shortcuts.
 - Repair corrupt TOML before restarting. In-memory defaults do not overwrite it.
 - Logs are emitted to stderr as level/message fields; redirect them when diagnosing.
+- Regular application launches send child stdout/stderr to
+  `$XDG_STATE_HOME/luma-launcher/applications.log` (default
+  `~/.local/state/luma-launcher/applications.log`) with mode 0600 on creation.
+  This keeps application output, such as Electron GPU warnings, out of Luma's
+  terminal. At 5 MiB, the log rotates to `applications.log.1` on the next launch;
+  only one prior log is retained. A single verbose app can exceed the limit before
+  the next launch. If the log cannot be opened, Luma warns
+  once for that launch and discards child output so the app can still start.
+  Launch errors still appear in Luma. Desktop actions and browser handlers keep
+  their native GIO launch paths; D-Bus-activated services manage their own output.
+  Apps that are already running retain their original output streams; close and
+  reopen them after updating Luma to use the new log destination.
 
 Known gaps are listed in verification.md. Theme/HiDPI/focus problems need a
 reproduction on the actual compositor; headless compilation does not validate them.

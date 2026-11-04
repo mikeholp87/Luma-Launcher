@@ -8,6 +8,7 @@ pub struct Entry {
     pub icon: String,
     pub fields: String,
     pub normalized: String,
+    pub normalized_description: String,
     pub acronym: String,
 }
 impl Entry {
@@ -19,6 +20,7 @@ impl Entry {
         fields: String,
     ) -> Self {
         let normalized = normalize(&name);
+        let normalized_description = normalize(&description);
         let acronym = normalized
             .split_whitespace()
             .filter_map(|w| w.chars().next())
@@ -30,6 +32,7 @@ impl Entry {
             icon,
             fields: normalize(&fields),
             normalized,
+            normalized_description,
             acronym,
         }
     }
@@ -72,7 +75,7 @@ pub fn search(
                 3
             } else if q.split_whitespace().all(|part| e.fields.contains(part)) {
                 2
-            } else if descriptions && normalize(&e.description).contains(&q) {
+            } else if descriptions && e.normalized_description.contains(&q) {
                 1
             } else {
                 return None;

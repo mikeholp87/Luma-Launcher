@@ -67,6 +67,7 @@ struct Inner {
     _hold: gio::ApplicationHoldGuard,
     window: Widget,
     input: Widget,
+    settings_button: Widget,
     list: Widget,
     scroll: Widget,
     status: Widget,
@@ -113,15 +114,26 @@ impl Launcher {
             g::gtk_entry_set_max_length(input, 512);
             g::gtk_entry_set_placeholder_text(input, c("Search applications...").as_ptr());
             g::gtk_entry_set_icon_from_icon_name(input, 0, c("system-search-symbolic").as_ptr());
-            g::gtk_box_append(layout, input);
+            let search_bar = g::gtk_box_new(0, 8);
+            g::gtk_widget_add_css_class(search_bar, c("search-bar").as_ptr());
+            g::gtk_widget_set_hexpand(input, 1);
+            g::gtk_box_append(search_bar, input);
+            let settings_button = button("Settings");
+            g::gtk_widget_set_tooltip_text(
+                settings_button,
+                c("Open Settings (Ctrl+, or Ctrl++)").as_ptr(),
+            );
+            g::gtk_box_append(search_bar, settings_button);
+            g::gtk_box_append(layout, search_bar);
             let list = g::gtk_list_box_new();
             let scroll = g::gtk_scrolled_window_new();
             g::gtk_scrolled_window_set_child(scroll, list);
             g::gtk_scrolled_window_set_max_content_height(scroll, 380);
             g::gtk_scrolled_window_set_propagate_natural_height(scroll, 1);
             g::gtk_box_append(layout, scroll);
-            let status =
-                label("Enter: Open    ↑/↓: Navigate    Esc: Close    Settings: Ctrl+, or Ctrl++");
+            let status = label("↑↓ Navigate    Enter Open    Esc Close");
+            g::gtk_label_set_ellipsize(status, 0);
+            g::gtk_label_set_wrap(status, 1);
             g::gtk_widget_add_css_class(status, c("footer").as_ptr());
             g::gtk_box_append(layout, status);
             let provider = g::gtk_css_provider_new();
@@ -135,6 +147,7 @@ impl Launcher {
                 _hold: app.hold(),
                 window,
                 input,
+                settings_button,
                 list,
                 scroll,
                 status,
@@ -163,6 +176,11 @@ impl Launcher {
                 settings.connect_changed(Some("color-scheme"), move |_, _| t.theme());
             }
             this.theme();
+            let t = this.clone();
+            signal(settings_button, "clicked", move |_| {
+                t.settings();
+                None
+            });
             let t = this.clone();
             signal(input, "changed", move |_| {
                 t.render();
@@ -337,6 +355,7 @@ impl Launcher {
                     .is_none_or(|s| s.string("color-scheme") != "prefer-dark"));
         let css = crate::theme::stylesheet(&cfg, light);
         unsafe {
+            g::gtk_widget_set_visible(self.0.settings_button, i32::from(cfg.show_settings_button));
             g::gtk_css_provider_load_from_data(self.0.provider, c(&css).as_ptr(), -1);
             g::gtk_window_set_default_size(self.0.window, cfg.width, -1);
         }
@@ -410,10 +429,9 @@ impl Launcher {
                     let text = g::gtk_box_new(1, 3);
                     g::gtk_widget_set_hexpand(text, 1);
                     let favorite = self.0.state.borrow().favorites.contains(&e.id);
-                    g::gtk_box_append(
-                        text,
-                        label(&format!("{}{}", if favorite { "★  " } else { "" }, e.name)),
-                    );
+                    let name = label(&format!("{}{}", if favorite { "★  " } else { "" }, e.name));
+                    g::gtk_widget_add_css_class(name, c("result-name").as_ptr());
+                    g::gtk_box_append(text, name);
                     if cfg.descriptions && !e.description.is_empty() {
                         let desc = label(&e.description);
                         g::gtk_widget_add_css_class(desc, c("description").as_ptr());
@@ -591,8 +609,11 @@ impl Launcher {
             match gio::DesktopAppInfo::new(&id)
                 .ok_or_else(|| "Application was removed".to_string())
                 .and_then(|a| {
-                    a.launch(&[], Some(&self.launch_context()))
-                        .map_err(|e| e.to_string())
+                    luma_launcher::launch::desktop(
+                        &a,
+                        &self.launch_context(),
+                        &state::directory("state").join("applications.log"),
+                    )
                 }) {
                 Ok(()) => {
                     if self.0.config.borrow().history {
@@ -687,10 +708,21 @@ impl Launcher {
             g::gtk_window_set_default_size(w, 560, 550);
             let layout = g::gtk_box_new(1, 8);
             g::gtk_widget_add_css_class(layout, c("palette").as_ptr());
+            g::gtk_widget_add_css_class(layout, c("settings").as_ptr());
             let scroll = g::gtk_scrolled_window_new();
             g::gtk_scrolled_window_set_child(scroll, layout);
             g::gtk_window_set_child(w, scroll);
-            g::gtk_box_append(layout, label("Luma Launcher 0.1.0 · Preferences"));
+            let heading = label("Settings");
+            g::gtk_widget_add_css_class(heading, c("settings-title").as_ptr());
+            g::gtk_box_append(layout, heading);
+            let help = label("Adjust Luma to suit your workflow. Press Enter to save a field.");
+            g::gtk_label_set_ellipsize(help, 0);
+            g::gtk_label_set_wrap(help, 1);
+            g::gtk_widget_add_css_class(help, c("settings-help").as_ptr());
+            g::gtk_box_append(layout, help);
+            let section = label("Display and shortcut");
+            g::gtk_widget_add_css_class(section, c("settings-section").as_ptr());
+            g::gtk_box_append(layout, section);
             for (name, key, value) in [
                 (
                     "Window width",
@@ -719,8 +751,12 @@ impl Launcher {
                 ),
             ] {
                 let row = g::gtk_box_new(0, 8);
-                g::gtk_box_append(row, label(name));
+                let field_label = label(name);
+                g::gtk_widget_set_hexpand(field_label, 1);
+                g::gtk_box_append(row, field_label);
                 let entry = g::gtk_entry_new();
+                g::gtk_label_set_mnemonic_widget(field_label, entry);
+                g::gtk_widget_set_tooltip_text(entry, c(name).as_ptr());
                 g::gtk_editable_set_text(entry, c(&value).as_ptr());
                 g::gtk_box_append(row, entry);
                 g::gtk_box_append(layout, row);
@@ -750,6 +786,7 @@ impl Launcher {
                             *t.0.config.borrow_mut() = cfg;
                             t.theme();
                             t.render();
+                            t.message("Setting saved.");
                         }
                     } else {
                         t.message("Invalid setting or corrupt configuration; value not saved");
@@ -760,6 +797,7 @@ impl Launcher {
             for (title, key) in [
                 ("Cycle theme: dark / light / system", "theme"),
                 ("Toggle compact layout", "compact"),
+                ("Show Settings button on launcher", "show_settings_button"),
                 ("Toggle launch history", "history"),
                 ("Toggle system app usage", "system_usage"),
                 ("Toggle descriptions", "descriptions"),
@@ -771,73 +809,134 @@ impl Launcher {
                 ("Register portal shortcut", "portal"),
                 ("Open desktop shortcut settings", "shortcut"),
             ] {
-                let text = setting_text(title, key, &self.0.config.borrow());
-                let button = button(&text);
+                if let Some(section) = match key {
+                    "history" => Some("Search and history"),
+                    "erase" => Some("Personalization"),
+                    "autostart" => Some("Shortcuts and startup"),
+                    _ => None,
+                } {
+                    let heading = label(section);
+                    g::gtk_widget_add_css_class(heading, c("settings-section").as_ptr());
+                    g::gtk_box_append(layout, heading);
+                }
+                let active = match key {
+                    "compact" => Some(self.0.config.borrow().compact),
+                    "show_settings_button" => Some(self.0.config.borrow().show_settings_button),
+                    "history" => Some(self.0.config.borrow().history),
+                    "system_usage" => Some(self.0.config.borrow().system_usage),
+                    "descriptions" => Some(self.0.config.borrow().descriptions),
+                    "fuzzy" => Some(self.0.config.borrow().fuzzy),
+                    "clear" => Some(self.0.config.borrow().clear_on_show),
+                    _ => None,
+                };
+                let button = if let Some(active) = active {
+                    let control = g::gtk_check_button_new_with_label(
+                        c(title.trim_start_matches("Toggle ")).as_ptr(),
+                    );
+                    g::gtk_check_button_set_active(control, i32::from(active));
+                    control
+                } else {
+                    button(&setting_text(title, key, &self.0.config.borrow()))
+                };
                 g::gtk_box_append(layout, button);
                 let t = self.clone();
-                signal(button, "clicked", move |_| {
-                    let mut cfg = t.0.config.borrow_mut();
-                    match key {
-                        "theme" => {
-                            cfg.theme = match cfg.theme.as_str() {
-                                "dark" => "light",
-                                "light" => "system",
-                                _ => "dark",
-                            }
-                            .into()
-                        }
-                        "compact" => cfg.compact = !cfg.compact,
-                        "history" => cfg.history = !cfg.history,
-                        "system_usage" => cfg.system_usage = !cfg.system_usage,
-                        "descriptions" => cfg.descriptions = !cfg.descriptions,
-                        "fuzzy" => cfg.fuzzy = !cfg.fuzzy,
-                        "clear" => cfg.clear_on_show = !cfg.clear_on_show,
-                        "erase" => t.0.state.borrow_mut().usage.clear(),
-                        "reset" => *t.0.state.borrow_mut() = State::default(),
-                        "portal" => {
-                            drop(cfg);
-                            t.setup_portal();
+                let restoring = Cell::new(false);
+                signal(
+                    button,
+                    if active.is_some() {
+                        "toggled"
+                    } else {
+                        "clicked"
+                    },
+                    move |_| {
+                        if restoring.get() {
                             return None;
                         }
-                        "autostart" => {
-                            if let Err(e) = autostart() {
-                                t.message(&e)
+                        let previous = t.0.config.borrow().clone();
+                        let mut cfg = t.0.config.borrow_mut();
+                        match key {
+                            "theme" => {
+                                cfg.theme = match cfg.theme.as_str() {
+                                    "dark" => "light",
+                                    "light" => "system",
+                                    _ => "dark",
+                                }
+                                .into()
                             }
-                        }
-                        "shortcut" => {
-                            let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
-                            let command = if desktop.contains("KDE") {
-                                ("systemsettings", "kcm_keys")
-                            } else {
-                                ("gnome-control-center", "keyboard")
-                            };
-                            if let Err(e) =
-                                std::process::Command::new(command.0).arg(command.1).spawn()
-                            {
-                                t.message(&e.to_string())
+                            "compact" => cfg.compact = !cfg.compact,
+                            "show_settings_button" => {
+                                cfg.show_settings_button = !cfg.show_settings_button
                             }
-                            t.message("Create a shortcut for luma-launcher --toggle; resolve Alt+Space conflicts in desktop Settings.");
+                            "history" => cfg.history = !cfg.history,
+                            "system_usage" => cfg.system_usage = !cfg.system_usage,
+                            "descriptions" => cfg.descriptions = !cfg.descriptions,
+                            "fuzzy" => cfg.fuzzy = !cfg.fuzzy,
+                            "clear" => cfg.clear_on_show = !cfg.clear_on_show,
+                            "erase" => t.0.state.borrow_mut().usage.clear(),
+                            "reset" => *t.0.state.borrow_mut() = State::default(),
+                            "portal" => {
+                                drop(cfg);
+                                t.setup_portal();
+                                return None;
+                            }
+                            "autostart" => {
+                                if let Err(e) = autostart() {
+                                    t.message(&e)
+                                }
+                            }
+                            "shortcut" => {
+                                let desktop =
+                                    std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
+                                let command = if desktop.contains("KDE") {
+                                    ("systemsettings", "kcm_keys")
+                                } else {
+                                    ("gnome-control-center", "keyboard")
+                                };
+                                if let Err(e) =
+                                    std::process::Command::new(command.0).arg(command.1).spawn()
+                                {
+                                    t.message(&e.to_string())
+                                }
+                                t.message("Create a shortcut for luma-launcher --toggle; resolve Alt+Space conflicts in desktop Settings.");
+                            }
+                            _ => {}
                         }
-                        _ => {}
-                    }
-                    gtk_button_set_label(button, c(&setting_text(title, key, &cfg)).as_ptr());
-                    let saved = if t.0.config_writable {
-                        state::save(&state::directory("config").join("config.toml"), &*cfg)
-                    } else {
-                        Err("Corrupt configuration preserved; repair it before saving.".into())
-                    };
-                    drop(cfg);
-                    if let Err(e) = saved {
-                        t.message(&e)
-                    }
-                    t.persist();
-                    t.theme();
-                    t.render();
-                    None
-                });
+                        if active.is_none() {
+                            gtk_button_set_label(
+                                button,
+                                c(&setting_text(title, key, &cfg)).as_ptr(),
+                            );
+                        }
+                        let saved = if t.0.config_writable {
+                            state::save(&state::directory("config").join("config.toml"), &*cfg)
+                        } else {
+                            Err("Corrupt configuration preserved; repair it before saving.".into())
+                        };
+                        drop(cfg);
+                        if let Err(e) = saved {
+                            if active.is_some() {
+                                *t.0.config.borrow_mut() = previous;
+                                restoring.set(true);
+                                let checked = object(button).property::<bool>("active");
+                                g::gtk_check_button_set_active(button, i32::from(!checked));
+                                restoring.set(false);
+                            }
+                            t.message(&e)
+                        }
+                        t.persist();
+                        t.theme();
+                        t.render();
+                        None
+                    },
+                );
             }
-            g::gtk_box_append(layout,label("Ctrl+D: pin/unpin · Ctrl+Delete: forget selected app\nEdit config.toml for width, accent, font and result count.\nWindow position and focus are managed by your compositor."));
+            let tips = label("Ctrl+D: pin or unpin    Ctrl+Delete: forget an app");
+            g::gtk_widget_add_css_class(tips, c("settings-help").as_ptr());
+            g::gtk_box_append(layout, tips);
             let status = label("Press Enter in a setting field to save it.");
+            g::gtk_label_set_ellipsize(status, 0);
+            g::gtk_label_set_wrap(status, 1);
+            g::gtk_widget_add_css_class(status, c("settings-help").as_ptr());
             self.0.settings_status.set(status);
             g::gtk_box_append(layout, status);
             let t = self.clone();
@@ -916,7 +1015,20 @@ mod tests {
 
     #[test]
     #[ignore = "requires a graphical desktop session"]
-    fn inactive_window_notification_hides_launcher_and_toggle_reopens_it() {
+    fn focus_dismissal_and_settings_save_rollback() {
+        unsafe fn checkbox(widget: Widget) -> Option<Widget> {
+            if object(widget).type_().name() == "GtkCheckButton" {
+                return Some(widget);
+            }
+            let mut child = g::gtk_widget_get_first_child(widget);
+            while !child.is_null() {
+                if let Some(found) = checkbox(child) {
+                    return Some(found);
+                }
+                child = g::gtk_widget_get_next_sibling(child);
+            }
+            None
+        }
         let root = std::env::temp_dir().join(format!("luma-focus-test-{}", std::process::id()));
         std::fs::create_dir(&root).unwrap();
         std::env::set_var("XDG_CONFIG_HOME", &root);
@@ -945,6 +1057,26 @@ mod tests {
             assert!(window.property::<bool>("visible"));
             assert!(launcher.0.visible.get());
             launcher.hide();
+
+            launcher.command("--settings");
+            let control = checkbox(launcher.0.settings.get()).expect("native settings checkbox");
+            assert!(!object(control).property::<bool>("active"));
+            let directory = root.join("luma-launcher");
+            std::fs::write(&directory, "blocks configuration writes").unwrap();
+            g::gtk_check_button_set_active(control, 1);
+            assert!(!object(control).property::<bool>("active"));
+            assert!(!launcher.0.config.borrow().compact);
+
+            std::fs::remove_file(&directory).unwrap();
+            g::gtk_check_button_set_active(control, 1);
+            assert!(object(control).property::<bool>("active"));
+            assert!(launcher.0.config.borrow().compact);
+            assert!(
+                state::load::<Config>(&directory.join("config.toml"))
+                    .unwrap()
+                    .compact
+            );
+            g::gtk_window_destroy(launcher.0.settings.get());
             g::gtk_window_destroy(launcher.0.window);
         }
         std::fs::remove_dir_all(root).unwrap();

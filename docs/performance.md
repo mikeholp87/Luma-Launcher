@@ -4,17 +4,19 @@ Measured in this restricted Debian forky/sid environment, x86-64 Intel Core 7 15
 12 logical CPUs, release optimization with thin LTO. These results do not establish
 desktop responsiveness or compositor latency.
 
-`cargo bench --offline --bench search`: 100 repetitions per dataset, synthetic
+`cargo bench --locked --bench search`: 100 repetitions per dataset, synthetic
 “Application N” entries, query `app 99`, result limit 8. Microsecond resolution.
+Latest run after precomputing normalized descriptions:
 
 | Entries | p50 | p95 |
 |---|---:|---:|
-| 100 | 91 µs | 118 µs |
-| 1,000 | 510 µs | 840 µs |
-| 10,000 | 4,846 µs | 5,537 µs |
+| 100 | 9 µs | 9 µs |
+| 1,000 | 56 µs | 102 µs |
+| 10,000 | 747 µs | 783 µs |
 
-The earlier run reported p95 75/850/5,303 µs respectively. This variation is not an
-optimization claim. The benchmark includes matching and sorting, not GTK rendering.
+The earlier run reported p95 118/840/5,537 µs respectively. Benchmark runs can
+vary; these numbers are observations, not a controlled before/after claim. The
+benchmark includes matching and sorting, not GTK rendering.
 
 Hyperfine, two warmups and 20 repetitions per command:
 

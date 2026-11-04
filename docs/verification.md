@@ -36,7 +36,7 @@ sharing binaries.
 ## Audit follow-up
 
 The full audit and fix record is [audit.md](audit.md). The current suite contains
-28 passing tests and one explicitly ignored graphical test. The optimized GLib
+41 passing tests and one explicitly ignored graphical test. The optimized GLib
 iterator regression also passes after reproducing a SIGSEGV before the upstream
 fix was backported. Strict application Clippy passes; the vendored dependency
 retains 34 upstream style/lifetime warnings. Installer tests now exercise actual

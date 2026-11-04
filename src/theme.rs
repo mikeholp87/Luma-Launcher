@@ -47,12 +47,23 @@ window.luma.launcher {{ background: transparent; }}
 .luma .palette {{ background: {canvas}; border: 1px solid {border}; border-radius: 16px; padding: 10px; }}
 .luma label, .luma image {{ color: {text}; }}
 .luma list, .luma scrolledwindow, .luma viewport {{ background: transparent; color: {text}; }}
-.luma row {{ background: transparent; color: {text}; padding: {row_padding}px 12px; border-radius: 9px; }}
+.luma row {{ background: transparent; color: {text}; padding: {row_padding}px 12px; border-left: 3px solid transparent; border-radius: 9px; }}
 .luma row:hover {{ background: {surface}; }}
-.luma row:selected, .luma row:selected:hover {{ background: {selection}; color: {text}; outline: 1px solid {accent}; }}
+.luma row:selected, .luma row:selected:hover {{ background: {selection}; color: {text}; border-left-color: {accent}; outline: none; }}
+.luma .result-name {{ font-weight: 600; }}
+.luma .search-bar {{ padding-bottom: 8px; border-bottom: 1px solid {border}; margin-bottom: 8px; }}
+.luma .search-bar button {{ margin: 10px 4px; padding: 6px 10px; }}
 .luma .description, .luma .footer {{ color: {muted}; font-size: 12px; }}
 .luma row:selected label {{ color: {text}; }}
 .luma .footer {{ padding: 12px; border-top: 1px solid {border}; }}
+.luma .settings {{ padding: 20px 24px; }}
+.luma .settings-title {{ font-size: 24px; font-weight: 700; }}
+.luma .settings-help {{ color: {muted}; font-size: 12px; }}
+.luma .settings-section {{ font-size: 15px; font-weight: 700; padding-top: 16px; padding-bottom: 4px; }}
+.luma .settings checkbutton {{ padding: 8px 2px; color: {text}; }}
+.luma .settings checkbutton check {{ background: {surface}; color: {text}; border: 1px solid {muted}; border-radius: 4px; min-width: 18px; min-height: 18px; margin-right: 10px; }}
+.luma .settings checkbutton check:checked {{ background: {selection}; color: {text}; border-color: {muted}; }}
+.luma .settings checkbutton:focus-visible {{ outline: 2px solid {muted}; outline-offset: 2px; }}
 .luma entry {{ background: {surface}; color: {text}; border: 1px solid {border}; border-radius: 8px; box-shadow: none; padding: 8px 10px; }}
 .luma entry text {{ color: {text}; caret-color: {text}; }}
 .luma entry.search {{ background: transparent; border-color: transparent; padding: 16px 12px; font-size: {font_size}px; }}

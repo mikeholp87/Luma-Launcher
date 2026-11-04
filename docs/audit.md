@@ -132,7 +132,7 @@ release compilation, the optimized GLib regression, and isolated install/removal
 ShellCheck, shfmt, desktop-entry validation, secret scanning, and Debian package
 checks are also part of the audit handoff. See verification.md for final counts.
 
-Final results: 28 tests passed, one graphical test ignored; release compilation,
+Initial audit results: 28 tests passed, one graphical test ignored; release compilation,
 the optimized GLib regression, ShellCheck, shfmt, formatting, installer tests,
 desktop validation, and Gitleaks passed. Debian extraction verified an exact
 executable match and included upstream licensing. The installed executable at
@@ -155,3 +155,13 @@ Not checked: live KDE/GNOME shortcut registration, compositor focus, suspend/res
 HiDPI/multiple monitors, visual rendering, Stable container/package installation,
 and independent review of the complete third-party/native libraries. One graphical
 test remains explicitly ignored. No “bug-free” or production-ready claim is made.
+
+## Follow-up on 2026-11-04
+
+After subsequent launcher and UI changes, `cargo fmt --check`, strict Clippy,
+`cargo test --locked` (41 passed, one ignored), and release compilation passed.
+Gitleaks scanned the repository after compilation and found no leaks. ShellCheck
+and shfmt passed. Search now precomputes normalized descriptions, and child output
+logs rotate at 5 MiB between launches, retaining one prior log. A single long-lived
+or unusually verbose child can still grow its current log beyond that threshold.
+Dependency advisory scanning and live desktop testing remain outstanding.

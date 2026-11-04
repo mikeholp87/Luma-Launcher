@@ -7,7 +7,7 @@ description = "A native keyboard-driven GTK4 application launcher"
 build = "build.rs"
 
 [dependencies]
-gio = "=0.18.4"
+gio = { version = "=0.18.4", features = ["v2_58"] }
 glib = "=0.18.5"
 serde = { version = "1", features = ["derive"] }
 toml = "=0.8.2"

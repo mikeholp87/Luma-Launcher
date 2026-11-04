@@ -17,6 +17,9 @@ Configuration: `$XDG_CONFIG_HOME/luma-launcher/config.toml`, defaulting to
 `$XDG_STATE_HOME/luma-launcher/history.toml`, defaulting to
 `~/.local/state/luma-launcher/history.toml`. Settings writes config; width,
 font_size, accent (#RRGGBB), results, and shortcut can also be edited in TOML.
+The launcher Settings button is hidden by default. Enable “Show Settings button
+on launcher” in Settings, or set `show_settings_button = true`. Ctrl+, and Ctrl++
+open Settings even when the button is hidden.
 Restart after external edits. Width is limited to 360–1200, font to 12–32, results
 to 1–20. Copy and repair corrupt files, then restart; Luma preserves the originals.
 
