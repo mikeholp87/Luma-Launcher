@@ -1,0 +1,27 @@
+[package]
+name = "luma-launcher"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "A native keyboard-driven GTK4 application launcher"
+build = "build.rs"
+
+[dependencies]
+gio = "=0.18.4"
+glib = "=0.18.5"
+serde = { version = "1", features = ["derive"] }
+toml = "=0.8.2"
+url = "=2.5.8"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
+[[bench]]
+name = "search"
+harness = false
+
+[patch.crates-io]
+# Upstream's VariantStrIter fix, backported for reproducible offline builds.
+glib = { path = "vendor/glib" }

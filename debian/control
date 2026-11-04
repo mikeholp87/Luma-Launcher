@@ -1,0 +1,9 @@
+Source: luma-launcher
+Section: utils
+Priority: optional
+Maintainer: Luma Launcher contributors <noreply@example.invalid>
+Standards-Version: 4.7.0
+
+Package: luma-launcher
+Architecture: any
+Description: Native GTK4 application launcher
