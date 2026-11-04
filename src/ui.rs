@@ -68,6 +68,7 @@ struct Inner {
     window: Widget,
     input: Widget,
     list: Widget,
+    scroll: Widget,
     status: Widget,
     settings_status: Cell<Widget>,
     entries: RefCell<Vec<Entry>>,
@@ -135,6 +136,7 @@ impl Launcher {
                 window,
                 input,
                 list,
+                scroll,
                 status,
                 settings_status: Cell::new(std::ptr::null_mut()),
                 entries: RefCell::new(vec![]),
@@ -426,6 +428,24 @@ impl Launcher {
                 }
             }
             *self.0.results.borrow_mut() = results;
+            // Size the results area to its content (two-line rows with
+            // descriptions exceed the old fixed cap) instead of clipping.
+            // Results beyond the cap scroll.
+            const MAX_RESULTS_HEIGHT: i32 = 720;
+            let mut natural: i32 = 1;
+            g::gtk_widget_measure(
+                self.0.list,
+                1, // GTK_ORIENTATION_VERTICAL
+                -1,
+                std::ptr::null_mut(),
+                &mut natural,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            );
+            g::gtk_scrolled_window_set_max_content_height(
+                self.0.scroll,
+                natural.clamp(1, MAX_RESULTS_HEIGHT),
+            );
             self.0.selected.set(0);
             g::gtk_list_box_select_row(
                 self.0.list,

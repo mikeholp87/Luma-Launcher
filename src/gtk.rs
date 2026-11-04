@@ -38,6 +38,15 @@ unsafe extern "C" {
     pub fn gtk_scrolled_window_new() -> Widget;
     pub fn gtk_scrolled_window_set_child(w: Widget, child: Widget);
     pub fn gtk_scrolled_window_set_max_content_height(w: Widget, height: c_int);
+    pub fn gtk_widget_measure(
+        w: Widget,
+        orientation: c_int,
+        for_size: c_int,
+        minimum: *mut c_int,
+        natural: *mut c_int,
+        minimum_baseline: *mut c_int,
+        natural_baseline: *mut c_int,
+    );
     pub fn gtk_scrolled_window_set_propagate_natural_height(w: Widget, b: c_int);
     pub fn gtk_image_new_from_gicon(icon: Widget) -> Widget;
     pub fn gtk_image_set_pixel_size(w: Widget, size: c_int);
