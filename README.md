@@ -45,9 +45,9 @@ launching instead of interpreting desktop-entry commands itself.
   prefixes, explicit HTTP/HTTPS URL opening, and declared desktop actions.
 - **Local privacy:** no telemetry, advertising, downloaded application icons, or
   tracking of activity outside Luma. Launch history can be disabled or cleared.
-  When "system app usage" is enabled, Luma reads GNOME Shell's
-  `application_state` tally read-only to rank applications; it never writes to
-  that file.
+  When "system app usage" is enabled, Luma reads the desktop environment's own
+  usage tally read-only to rank applications — GNOME Shell's
+  `application_state` or KDE's activity statistics — and never writes to it.
 
 ## Requirements
 
@@ -270,9 +270,12 @@ a Settings field to save it. Restart Luma after editing TOML externally.
 
 History only records applications launched through Luma. Disabling history stops
 new records; clear existing records separately in Settings. When "system app
-usage" is on, applications already tallied by GNOME Shell (`score` and
-`last-seen` in `~/.local/share/gnome-shell/application_state`) are ranked by
-that combined usage, most used first and most recently used as a tiebreaker;
+usage" is on, applications already tallied by the desktop are ranked by that
+combined usage, most used first and most recently used as a tiebreaker. The
+source follows the session: GNOME Shell's `score` and `last-seen` in
+`~/.local/share/gnome-shell/application_state`, or KDE's activity statistics
+in `~/.local/share/kactivitymanagerd/resources/database` (read through
+`sqlite3 -readonly`). `luma-launcher --diagnostics` prints the source in use.
 Ctrl+Delete removes an application from that combined ranking until it is
 launched through Luma again. Writes use exclusive temporary files, atomic
 replacement, and private state-file permissions. Corrupt files are preserved

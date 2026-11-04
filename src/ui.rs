@@ -253,9 +253,15 @@ impl Launcher {
             monitor.connect_changed(move |_| t.refresh());
             if this.0.config.borrow().system_usage {
                 this.harvest();
-                if let Some(path) = system::gnome_state_path() {
-                    if let Ok(monitor) = gio::File::for_path(&path)
-                        .monitor(gio::FileMonitorFlags::NONE, None::<&gio::Cancellable>)
+                if let Some((_, path)) = system::backend() {
+                    // GNOME replaces the file atomically and KDE activity
+                    // statistics write through -wal, so watch the directory.
+                    let watch = match path.parent() {
+                        Some(parent) => gio::File::for_path(parent),
+                        None => gio::File::for_path(&path),
+                    };
+                    if let Ok(monitor) =
+                        watch.monitor(gio::FileMonitorFlags::NONE, None::<&gio::Cancellable>)
                     {
                         let t = this.clone();
                         monitor.connect_changed(move |_, _, _, _| {
@@ -516,7 +522,7 @@ impl Launcher {
         }
     }
     fn harvest(&self) {
-        *self.0.system.borrow_mut() = system::gnome_usage();
+        *self.0.system.borrow_mut() = system::harvest();
     }
     fn launch_context(&self) -> gio::AppLaunchContext {
         unsafe {
@@ -852,7 +858,10 @@ unsafe fn button(s: &str) -> Widget {
     gtk_button_new_with_label(c(s).as_ptr())
 }
 pub fn diagnostics() {
-    println!("Luma {}\nDesktop: {}\nSession: {}\nGTK: {}.{}\nRust: {}\nConfiguration: {}\nShortcut backend: portal registration on explicit setup; desktop-managed fallback\nSession bus: {}\nInstalled applications: {}",env!("CARGO_PKG_VERSION"),std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default(),std::env::var("XDG_SESSION_TYPE").unwrap_or_default(),unsafe{g::gtk_get_major_version()},unsafe{g::gtk_get_minor_version()},env!("LUMA_RUSTC"),state::directory("config").display(),if gio::bus_get_sync(gio::BusType::Session,None::<&gio::Cancellable>).is_ok(){"accessible"}else{"unavailable"},discover().len());
+    let usage_source = system::backend()
+        .map(|(b, p)| format!("{} ({})", b.label(), p.display()))
+        .unwrap_or_else(|| "unavailable".into());
+    println!("Luma {}\nDesktop: {}\nSession: {}\nGTK: {}.{}\nRust: {}\nConfiguration: {}\nShortcut backend: portal registration on explicit setup; desktop-managed fallback\nSession bus: {}\nUsage source: {}\nInstalled applications: {}",env!("CARGO_PKG_VERSION"),std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default(),std::env::var("XDG_SESSION_TYPE").unwrap_or_default(),unsafe{g::gtk_get_major_version()},unsafe{g::gtk_get_minor_version()},env!("LUMA_RUSTC"),state::directory("config").display(),if gio::bus_get_sync(gio::BusType::Session,None::<&gio::Cancellable>).is_ok(){"accessible"}else{"unavailable"},usage_source,discover().len());
 }
 
 fn system_settings() -> Option<gio::Settings> {
