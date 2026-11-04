@@ -32,9 +32,8 @@ launching instead of interpreting desktop-entry commands itself.
   actions, visibility rules, and desktop-ID precedence through GIO.
 - **Keyboard navigation:** select results, launch, dismiss, pin favorites, remove
   history entries, and open settings without reaching for the mouse.
-- **Personalized ranking:** favorites, most-used applications first (a running
-  launch tally optionally combined with the desktop environment's own usage
-  records), then recent launches, while preserving the priority of exact matches.
+- **Personalized ranking:** favorites, recent launches, and launch frequency,
+  while preserving the priority of exact name matches.
 - **Resident activation:** show, hide, toggle, and refresh commands communicate
   with one application instance through the desktop session bus.
 - **Event-driven discovery:** application-change notifications refresh the index
@@ -45,9 +44,6 @@ launching instead of interpreting desktop-entry commands itself.
   prefixes, explicit HTTP/HTTPS URL opening, and declared desktop actions.
 - **Local privacy:** no telemetry, advertising, downloaded application icons, or
   tracking of activity outside Luma. Launch history can be disabled or cleared.
-  When "system app usage" is enabled, Luma reads the desktop environment's own
-  usage tally read-only to rank applications — GNOME Shell's
-  `application_state` or KDE's activity statistics — and never writes to it.
 
 ## Requirements
 
@@ -256,7 +252,6 @@ results = 8
 font_size = 19
 compact = false
 history = true
-system_usage = true
 descriptions = true
 fuzzy = true
 clear_on_show = true
@@ -269,17 +264,9 @@ Themes are `dark`, `light`, or `system`. Width accepts 360–1200 pixels, font s
 a Settings field to save it. Restart Luma after editing TOML externally.
 
 History only records applications launched through Luma. Disabling history stops
-new records; clear existing records separately in Settings. When "system app
-usage" is on, applications already tallied by the desktop are ranked by that
-combined usage, most used first and most recently used as a tiebreaker. The
-source follows the session: GNOME Shell's `score` and `last-seen` in
-`~/.local/share/gnome-shell/application_state`, or KDE's activity statistics
-in `~/.local/share/kactivitymanagerd/resources/database` (read through
-`sqlite3 -readonly`). `luma-launcher --diagnostics` prints the source in use.
-Ctrl+Delete removes an application from that combined ranking until it is
-launched through Luma again. Writes use exclusive temporary files, atomic
-replacement, and private state-file permissions. Corrupt files are preserved
-rather than silently overwritten. Repair them and restart.
+new records; clear existing records separately in Settings. Writes use exclusive
+temporary files, atomic replacement, and private state-file permissions. Corrupt
+files are preserved rather than silently overwritten. Repair them and restart.
 
 ## Tests and verification
 
