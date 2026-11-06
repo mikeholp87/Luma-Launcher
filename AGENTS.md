@@ -2,13 +2,13 @@
 
 ## Project Structure & Module Organization
 
-This `luma-launcher` workspace currently contains no application source, assets, package manifests, or test configuration. The hidden `.agents/`, `.codex/`, and `.aws/` directories are environment metadata; do not use them for application code or commit credentials.
+The Rust/GTK Linux launcher lives in `src/`, with tests in `tests/`, assets in `assets/`, and Linux packaging in `scripts/`, `packaging/`, and `debian/`. The Windows PowerShell/WPF preview lives in `windows/`. The hidden `.agents/`, `.codex/`, and `.aws/` directories are environment metadata; do not use them for application code or commit credentials.
 
-When adding the initial implementation, group source, tests, and assets clearly (for example, `src/`, `tests/`, and `assets/`). Update this guide with the actual layout once established.
+Keep platform-specific implementations and their documentation together.
 
 ## Build, Test, and Development Commands
 
-No build, test, or local development commands are configured yet. Do not assume `npm test`, `npm run build`, or another toolchain works. When introducing a build system, document its prerequisites and exact install, development, build, and test commands here.
+Linux builds require Rust, pkg-config, GLib/GIO and GTK4 development libraries. Use `cargo build --locked`, `cargo test --locked`, and `cargo build --locked --release`; see README.md for prerequisites and further checks. The Windows preview requires Windows PowerShell 5.1 and WPF; run it with `powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\windows\LumaLauncher.ps1`. It has no build step.
 
 For repository exploration, use `rg --files --hidden` to list files and `rg "pattern" <path>` to search content. Prefix shell commands with `rtk`; use `rtk proxy <command>` for commands that need unfiltered output.
 
@@ -20,7 +20,7 @@ Lint any shell scripts you add or edit with `shellcheck <file>` and check format
 
 ## Testing Guidelines
 
-No testing framework or coverage threshold is configured. Add focused tests for nontrivial behavior and regression tests for bug fixes. Use descriptive test names and document the chosen framework, file naming convention, and execution command when tests are introduced.
+Rust unit tests are colocated with source and integration tests live in `tests/`; run `cargo test --locked`. Run Windows core tests with `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\Test-Core.ps1`. Add focused tests for nontrivial behavior and regression tests for bug fixes.
 
 ## Commit & Pull Request Guidelines
 

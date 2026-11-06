@@ -2,7 +2,42 @@
 
 <img src="assets/io.github.luma_launcher.LumaLauncher.svg" alt="Luma Launcher icon" width="88" height="88">
 
-**A native, keyboard-driven Linux application launcher built with Rust and GTK4.**
+**A keyboard-driven application launcher for Linux and Windows.**
+
+The Linux application is built with Rust and GTK4. A separate Windows preview
+uses Windows PowerShell 5.1 and WPF, with a similar dark search palette and
+keyboard-driven workflow. The two implementations have different features;
+the details below describe Linux unless explicitly marked Windows.
+
+## Windows preview
+
+On a Windows desktop, keep the files in `windows/` together and double-click
+`windows/LumaLauncher.cmd`. Alternatively, from the repository root run:
+
+```powershell
+powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\windows\LumaLauncher.ps1
+```
+
+Windows PowerShell 5.1 and WPF are required; no Rust, GTK, administrator access,
+or build step is needed. Ctrl+Alt+Space toggles the palette when available;
+running the launcher again also toggles it. Search Start Menu shortcuts, use
+arrow keys and Enter to open a result, and press Escape to hide the palette.
+F5 refreshes the index. The quit button or Alt+F4 exits the resident process.
+
+Windows supports exact, prefix, substring, and fuzzy search; favorites and
+launch-frequency ranking; local history; a calculator; web searches; and basic
+settings. Ctrl+D pins or unpins, Ctrl+Delete forgets an app's history, Ctrl+J/K
+navigate, and Ctrl+, opens Settings. Try `= 25 * 4`, `g search terms`, or
+`ddg search terms`. History and settings are stored locally in
+`%LOCALAPPDATA%\LumaLauncher\history.json`.
+
+The preview indexes `.lnk` shortcuts in the user and common Start Menu Programs
+folders. Some Microsoft Store apps and other apps without shortcuts there will
+not appear. App icons, system usage ranking, automatic login startup, desktop
+actions, and Linux's theme and layout controls have not been ported. The WPF
+layout and core logic have been checked, but interactive Windows UI and global
+shortcut behavior still need verification. See the [Windows guide](windows/README.md)
+for commands, privacy, troubleshooting, and tests.
 
 Luma brings installed applications, local favorites, quick calculations, and web
 search into a floating search palette. Assign a desktop shortcut, type what you
@@ -49,7 +84,7 @@ launching instead of interpreting desktop-entry commands itself.
   usage tally read-only to rank applications — GNOME Shell's
   `application_state` or KDE's activity statistics — and never writes to it.
 
-## Requirements
+## Linux requirements
 
 | Component | Requirement |
 |---|---|
@@ -64,7 +99,7 @@ A migration to gtk-rs is planned when dependencies can be fetched and validated.
 The cached GLib dependency includes an explicit upstream security backport;
 [provenance and maintenance notes](vendor/README.md) are included.
 
-## Build from source
+## Build from source (Linux)
 
 On Debian, install the development prerequisites:
 
@@ -329,6 +364,7 @@ include the separate Hyperfine CLI measurements.
 
 ```text
 src/          GTK interface, desktop integration, search, state, and quick tools
+windows/      Windows PowerShell/WPF launcher, core tests, and usage guide
 tests/        CLI, GIO, installation, and dependency regression tests
 benches/      Synthetic search benchmark
 assets/       Application icon

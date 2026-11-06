@@ -3,3 +3,4 @@
 *.tmp
 core
 core.*
+!windows/Core.ps1
