@@ -35,11 +35,10 @@ sharing binaries.
 
 ## Audit follow-up
 
-The full audit and fix record is [audit.md](audit.md). The current suite contains
-41 passing tests and one explicitly ignored graphical test. The optimized GLib
-iterator regression also passes after reproducing a SIGSEGV before the upstream
-fix was backported. Strict application Clippy passes; the vendored dependency
-retains 34 upstream style/lifetime warnings. Installer tests now exercise actual
+The full audit and fix record is [audit.md](audit.md). Run the suite with
+`cargo test --locked`; the widget test skips itself without a display and runs under
+Xvfb in CI. Strict Clippy passes for the whole tree. The gtk-rs migration removed
+the vendored GLib and its regression test. Installer tests now exercise actual
 GIO launches of a harmless fixture with an unrelated PATH, including executable
 paths containing spaces, quotes, and backslashes. Secret and package checks are
 recorded in the audit handoff. Full dependency auditing and live desktop coverage
@@ -80,6 +79,5 @@ GUI launch returned “Failed to open display”; session D-Bus access is denied
   reduced-motion safe. No arbitrary command mode, custom compositor positioning,
   forced focus, or custom icon cache was added.
 
-Useful next priorities: obtain an accessible GUI test session; migrate the offline
-GTK ABI layer to gtk-rs; add portal lifecycle tests; verify Stable packaging. Do
+Useful next priorities: portal lifecycle tests; verify Stable packaging. Do
 not treat these remaining acceptance checks as passed based on source inspection.
