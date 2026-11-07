@@ -20,7 +20,6 @@ pub struct Config {
     pub descriptions: bool,
     pub fuzzy: bool,
     pub clear_on_show: bool,
-    pub animations: bool,
     pub font_size: i32,
     pub system_usage: bool,
 }
@@ -39,7 +38,6 @@ impl Default for Config {
             descriptions: true,
             fuzzy: true,
             clear_on_show: true,
-            animations: true,
             font_size: 19,
             system_usage: true,
         }

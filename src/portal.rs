@@ -109,6 +109,73 @@ fn request(
         },
     );
 }
+const SETTINGS: &str = "org.freedesktop.portal.Settings";
+const APPEARANCE: &str = "org.freedesktop.appearance";
+/// `color-scheme`: 1 prefers dark, 2 prefers light, 0 has no preference.
+pub fn scheme_is_dark(value: &glib::Variant) -> Option<bool> {
+    // ReadOne's reply may arrive boxed in a variant; SettingChanged's does not.
+    let value = if value.is::<glib::Variant>() {
+        value.as_variant()?
+    } else {
+        value.clone()
+    };
+    match value.get::<u32>()? {
+        1 => Some(true),
+        2 => Some(false),
+        _ => None,
+    }
+}
+/// Follow the desktop-wide colour preference. KDE and GNOME both publish it
+/// through the settings portal; GSettings alone only works on GNOME.
+/// `holder` keeps the change subscription alive.
+pub fn watch_color_scheme(
+    holder: Rc<RefCell<Option<gio::SignalSubscription>>>,
+    on_change: impl Fn(Option<bool>) + 'static,
+) {
+    let on_change = Rc::new(on_change);
+    gio::bus_get(
+        gio::BusType::Session,
+        None::<&gio::Cancellable>,
+        move |bus| {
+            let Ok(bus) = bus else { return };
+            let notify = on_change.clone();
+            *holder.borrow_mut() = Some(bus.subscribe_to_signal(
+                Some(DEST),
+                Some(SETTINGS),
+                Some("SettingChanged"),
+                Some(PATH),
+                None,
+                gio::DBusSignalFlags::NONE,
+                move |signal| {
+                    if let Some((namespace, key, value)) =
+                        signal.parameters.get::<(String, String, glib::Variant)>()
+                    {
+                        if namespace == APPEARANCE && key == "color-scheme" {
+                            notify(scheme_is_dark(&value));
+                        }
+                    }
+                },
+            ));
+            bus.call(
+                Some(DEST),
+                PATH,
+                SETTINGS,
+                "ReadOne",
+                Some(&(APPEARANCE, "color-scheme").to_variant()),
+                None,
+                gio::DBusCallFlags::NONE,
+                5000,
+                None::<&gio::Cancellable>,
+                move |reply| {
+                    // No portal (or no value) leaves the GSettings fallback in charge.
+                    if let Some((value,)) = reply.ok().and_then(|r| r.get::<(glib::Variant,)>()) {
+                        on_change(scheme_is_dark(&value));
+                    }
+                },
+            );
+        },
+    );
+}
 fn session_handle(options: &Options) -> Result<ObjectPath, String> {
     let value = options
         .get("session_handle")
@@ -313,6 +380,15 @@ mod tests {
         let value = (path, "toggle", 0_u64, Options::new()).to_variant();
         assert_eq!(activation(&value, "/test"), Some(None));
         assert!(activation(&value, "/other").is_none());
+    }
+    #[test]
+    fn color_scheme_values_map_to_dark_light_or_unknown() {
+        for (raw, expected) in [(1_u32, Some(true)), (2, Some(false)), (0, None), (9, None)] {
+            // ReadOne wraps the value in a variant; SettingChanged does not.
+            assert_eq!(scheme_is_dark(&raw.to_variant()), expected);
+            assert_eq!(scheme_is_dark(&raw.to_variant().to_variant()), expected);
+        }
+        assert_eq!(scheme_is_dark(&"dark".to_variant()), None);
     }
     #[test]
     fn request_tokens_are_unique() {

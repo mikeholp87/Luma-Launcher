@@ -302,9 +302,12 @@ portal_shortcut = false
 shortcut = "ALT+space"
 ```
 
-Themes are `dark`, `light`, or `system`. Width accepts 360–1200 pixels, font size
-12–32, and result count 1–20. Accent colors use `#RRGGBB`. Press Enter after editing
-a Settings field to save it. Restart Luma after editing TOML externally.
+Themes are `dark`, `light`, or `system`; `system` follows the desktop-wide colour
+preference from the settings portal (KDE and GNOME), falling back to GNOME's
+GSettings key. Width accepts 360–1200 pixels and applies the next time the palette
+opens. Font size (12–32) scales the search box, result names, descriptions, footer
+and icons together. Result count is 1–20. Accent colors use `#RRGGBB`. Press Enter
+after editing a Settings field to save it. Restart Luma after editing TOML externally.
 
 History only records applications launched through Luma. Disabling history stops
 new records; clear existing records separately in Settings. When "system app

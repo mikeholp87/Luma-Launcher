@@ -1,3 +1,4 @@
+use crate::portal;
 use glib::clone;
 use gtk4::{self as gtk, gdk, pango, prelude::*};
 use luma_launcher::{
@@ -159,6 +160,8 @@ struct Inner {
     refresh_pending: Cell<bool>,
     monitor: gio::AppInfoMonitor,
     theme_settings: Option<gio::Settings>,
+    system_dark: Cell<Option<bool>>,
+    color_scheme_watch: Rc<RefCell<Option<gio::SignalSubscription>>>,
     portal_pending: Cell<bool>,
     portal: RefCell<Option<crate::portal::Session>>,
 }
@@ -279,6 +282,8 @@ impl Launcher {
             refresh_pending: Cell::new(false),
             monitor: gio::AppInfoMonitor::get(),
             theme_settings: system_settings(),
+            system_dark: Cell::new(None),
+            color_scheme_watch: Rc::new(RefCell::new(None)),
             portal_pending: Cell::new(false),
             portal: RefCell::new(None),
         }));
@@ -292,6 +297,17 @@ impl Launcher {
                 ),
             );
         }
+        portal::watch_color_scheme(
+            this.0.color_scheme_watch.clone(),
+            clone!(
+                #[weak(rename_to = t)]
+                this,
+                move |dark| {
+                    t.0.system_dark.set(dark);
+                    t.theme();
+                }
+            ),
+        );
         this.theme();
         settings_button.connect_clicked(clone!(
             #[weak(rename_to = t)]
@@ -377,27 +393,7 @@ impl Launcher {
             this,
             move |_| t.refresh()
         ));
-        if this.0.config.borrow().system_usage {
-            this.harvest();
-            if let Some((_, path)) = system::backend() {
-                // GNOME replaces the file atomically and KDE activity
-                // statistics write through -wal, so watch the directory.
-                let watch = match path.parent() {
-                    Some(parent) => gio::File::for_path(parent),
-                    None => gio::File::for_path(&path),
-                };
-                if let Ok(monitor) =
-                    watch.monitor(gio::FileMonitorFlags::NONE, None::<&gio::Cancellable>)
-                {
-                    monitor.connect_changed(clone!(
-                        #[weak(rename_to = t)]
-                        this,
-                        move |_, _, _, _| t.schedule_harvest()
-                    ));
-                    *this.0.system_monitor.borrow_mut() = Some(monitor);
-                }
-            }
-        }
+        this.sync_system_usage();
         if this.0.config.borrow().portal_shortcut {
             this.setup_portal();
         }
@@ -445,18 +441,27 @@ impl Launcher {
     }
     fn theme(&self) {
         let cfg = self.0.config.borrow();
-        let light = cfg.theme == "light"
-            || (cfg.theme == "system"
-                && self
-                    .0
-                    .theme_settings
-                    .as_ref()
-                    .is_none_or(|s| s.string("color-scheme") != "prefer-dark"));
+        let light = self.is_light(&cfg);
         self.0.settings_button.set_visible(cfg.show_settings_button);
         self.0
             .provider
             .load_from_data(&crate::theme::stylesheet(&cfg, light));
         self.0.window.set_default_size(cfg.width, -1);
+    }
+    /// Whether the light palette applies. "system" follows the desktop-wide
+    /// preference from the settings portal (KDE and GNOME), falling back to
+    /// GNOME's GSettings key, then to light.
+    fn is_light(&self, cfg: &Config) -> bool {
+        match cfg.theme.as_str() {
+            "light" => true,
+            "system" => !self.0.system_dark.get().unwrap_or_else(|| {
+                self.0
+                    .theme_settings
+                    .as_ref()
+                    .is_some_and(|s| s.string("color-scheme") == "prefer-dark")
+            }),
+            _ => false,
+        }
     }
     fn refresh(&self) {
         if self.0.indexing.replace(true) {
@@ -516,11 +521,17 @@ impl Launcher {
                 let row = gtk::Box::builder().spacing(12).build();
                 let icon = gio::Icon::for_string(&e.icon)
                     .unwrap_or_else(|_| gio::ThemedIcon::new("application-x-executable").upcast());
-                row.append(&gtk::Image::builder().gicon(&icon).pixel_size(36).build());
+                row.append(
+                    &gtk::Image::builder()
+                        .gicon(&icon)
+                        .pixel_size(crate::theme::scaled(cfg.font_size, 36, 24))
+                        .build(),
+                );
                 let text = gtk::Box::builder()
                     .orientation(gtk::Orientation::Vertical)
                     .spacing(3)
                     .hexpand(true)
+                    .valign(gtk::Align::Center)
                     .build();
                 let favorite = self.0.state.borrow().favorites.contains(&e.id);
                 let name = label(&format!("{}{}", if favorite { "★  " } else { "" }, e.name));
@@ -631,6 +642,36 @@ impl Launcher {
                 t.render();
             }
         });
+    }
+    /// Match the desktop-usage import to the `system_usage` setting, both at
+    /// startup and when it is toggled: load once and watch while enabled,
+    /// stop watching while disabled.
+    fn sync_system_usage(&self) {
+        if !self.0.config.borrow().system_usage {
+            *self.0.system_monitor.borrow_mut() = None;
+            return;
+        }
+        self.harvest();
+        if self.0.system_monitor.borrow().is_some() {
+            return;
+        }
+        let Some((_, path)) = system::backend() else {
+            return;
+        };
+        // GNOME replaces the file atomically and KDE activity statistics
+        // write through -wal, so watch the directory.
+        let watch = match path.parent() {
+            Some(parent) => gio::File::for_path(parent),
+            None => gio::File::for_path(&path),
+        };
+        if let Ok(monitor) = watch.monitor(gio::FileMonitorFlags::NONE, None::<&gio::Cancellable>) {
+            monitor.connect_changed(clone!(
+                #[weak(rename_to = t)]
+                self,
+                move |_, _, _, _| t.schedule_harvest()
+            ));
+            *self.0.system_monitor.borrow_mut() = Some(monitor);
+        }
     }
     /// Directory monitors fire per write (SQLite WAL is continuous), so
     /// coalesce a burst into one harvest.
@@ -767,29 +808,7 @@ impl Launcher {
             .and_then(|a| luma_launcher::launch::desktop(&a, &self.launch_context(), &log_path()))
         {
             Ok(()) => {
-                if self.0.config.borrow().history {
-                    let mut s = self.0.state.borrow_mut();
-                    s.ignored.remove(&id);
-                    let u = s.usage.entry(id).or_default();
-                    u.count = u.count.saturating_add(1);
-                    u.last = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs();
-                    while s.usage.len() > 1000 {
-                        let oldest = s
-                            .usage
-                            .iter()
-                            .min_by_key(|(_, u)| u.last)
-                            .map(|(id, _)| id.clone());
-                        if let Some(id) = oldest {
-                            s.usage.remove(&id);
-                        } else {
-                            break;
-                        }
-                    }
-                    drop(s);
-                    self.invalidate();
+                if self.record_launch(id) {
                     // fsync must not delay dismissing the window; idle
                     // priority runs after the hide has been redrawn.
                     let t = self.clone();
@@ -802,6 +821,36 @@ impl Launcher {
                 self.refresh();
             }
         }
+    }
+    /// Count a launch when history is enabled. Returns whether state changed
+    /// (and so needs saving).
+    fn record_launch(&self, id: String) -> bool {
+        if !self.0.config.borrow().history {
+            return false;
+        }
+        let mut s = self.0.state.borrow_mut();
+        s.ignored.remove(&id);
+        let u = s.usage.entry(id).or_default();
+        u.count = u.count.saturating_add(1);
+        u.last = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        while s.usage.len() > 1000 {
+            let oldest = s
+                .usage
+                .iter()
+                .min_by_key(|(_, u)| u.last)
+                .map(|(id, _)| id.clone());
+            if let Some(id) = oldest {
+                s.usage.remove(&id);
+            } else {
+                break;
+            }
+        }
+        drop(s);
+        self.invalidate();
+        true
     }
     fn setup_portal(&self) {
         if self.0.portal.borrow().is_some() || self.0.portal_pending.replace(true) {
@@ -1022,6 +1071,12 @@ impl Launcher {
                 self.theme();
                 self.render();
                 self.message("Setting saved.");
+                // A registered portal shortcut keeps the old trigger until
+                // it is re-bound.
+                if key == "shortcut" && self.0.portal.borrow().is_some() {
+                    self.0.portal.borrow_mut().take();
+                    self.setup_portal();
+                }
             }
         } else {
             self.message("Invalid setting or corrupt configuration; value not saved");
@@ -1112,6 +1167,9 @@ impl Launcher {
         }
         if destructive {
             self.persist();
+        }
+        if key == "system_usage" {
+            self.sync_system_usage();
         }
         self.invalidate();
         self.theme();
@@ -1251,7 +1309,20 @@ mod tests {
             return;
         }
         crate::theme::assert_stylesheets_parse();
-        focus_dismissal_and_settings_save_rollback();
+        let root = std::env::temp_dir().join(format!("luma-gtk-test-{}", std::process::id()));
+        std::fs::create_dir(&root).unwrap();
+        std::env::set_var("XDG_CONFIG_HOME", &root);
+        std::env::set_var("XDG_STATE_HOME", &root);
+        let app = gtk::Application::builder()
+            .application_id("io.github.luma_launcher.FocusTest")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(None::<&gio::Cancellable>).unwrap();
+        let launcher = Launcher::new(&app);
+        focus_dismissal_and_settings_save_rollback(&launcher, &root);
+        every_setting_takes_effect(&launcher, &root);
+        launcher.0.window.destroy();
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     fn checkbox(widget: &gtk::Widget) -> Option<gtk::CheckButton> {
@@ -1268,17 +1339,7 @@ mod tests {
         None
     }
 
-    fn focus_dismissal_and_settings_save_rollback() {
-        let root = std::env::temp_dir().join(format!("luma-focus-test-{}", std::process::id()));
-        std::fs::create_dir(&root).unwrap();
-        std::env::set_var("XDG_CONFIG_HOME", &root);
-        std::env::set_var("XDG_STATE_HOME", &root);
-        let app = gtk::Application::builder()
-            .application_id("io.github.luma_launcher.FocusTest")
-            .flags(gio::ApplicationFlags::NON_UNIQUE)
-            .build();
-        app.register(None::<&gio::Cancellable>).unwrap();
-        let launcher = Launcher::new(&app);
+    fn focus_dismissal_and_settings_save_rollback(launcher: &Launcher, root: &std::path::Path) {
         let window = launcher.0.window.clone();
         launcher.command("--show");
         assert!(window.is_visible());
@@ -1313,8 +1374,394 @@ mod tests {
                 .unwrap()
                 .compact
         );
-        settings.destroy();
-        window.destroy();
-        std::fs::remove_dir_all(root).unwrap();
+        // Closing (not destroying) runs the close-request cleanup.
+        settings.close();
+        assert!(launcher.0.settings.borrow().is_none());
+    }
+
+    /// Every widget under `root`, depth first.
+    fn widgets(root: &gtk::Widget, found: &mut Vec<gtk::Widget>) {
+        found.push(root.clone());
+        let mut child = root.first_child();
+        while let Some(current) = child {
+            widgets(&current, found);
+            child = current.next_sibling();
+        }
+    }
+    /// Look up Settings controls by what the user sees.
+    struct Controls(Vec<gtk::Widget>);
+    impl Controls {
+        fn open(launcher: &Launcher) -> Self {
+            launcher.command("--settings");
+            let window = launcher.0.settings.borrow().clone().unwrap();
+            let mut found = vec![];
+            widgets(window.upcast_ref(), &mut found);
+            Self(found)
+        }
+        fn check(&self, label: &str) -> gtk::CheckButton {
+            self.0
+                .iter()
+                .filter_map(|w| w.downcast_ref::<gtk::CheckButton>())
+                .find(|c| c.label().as_deref() == Some(label))
+                .unwrap_or_else(|| panic!("no checkbox {label:?}"))
+                .clone()
+        }
+        fn button(&self, prefix: &str) -> gtk::Button {
+            self.0
+                .iter()
+                .filter_map(|w| w.downcast_ref::<gtk::Button>())
+                .find(|b| b.label().is_some_and(|l| l.starts_with(prefix)))
+                .unwrap_or_else(|| panic!("no button {prefix:?}"))
+                .clone()
+        }
+        fn field(&self, name: &str) -> gtk::Entry {
+            self.0
+                .iter()
+                .filter_map(|w| w.downcast_ref::<gtk::Entry>())
+                .find(|e| e.tooltip_text().as_deref() == Some(name))
+                .unwrap_or_else(|| panic!("no field {name:?}"))
+                .clone()
+        }
+        /// Type into a field and press Enter, as a user would.
+        fn commit(&self, name: &str, text: &str) {
+            let entry = self.field(name);
+            entry.set_text(text);
+            entry.emit_by_name::<()>("activate", &[]);
+        }
+        /// Flip a checkbox until it matches `on`.
+        fn set(&self, label: &str, on: bool) {
+            let check = self.check(label);
+            if check.is_active() != on {
+                check.set_active(on);
+            }
+        }
+    }
+
+    fn app(id: &str, name: &str, description: &str, fields: &str) -> Entry {
+        Entry::new(
+            id.into(),
+            name.into(),
+            description.into(),
+            String::new(),
+            fields.into(),
+        )
+    }
+    fn names(launcher: &Launcher) -> Vec<String> {
+        let entries = launcher.0.entries.borrow();
+        launcher
+            .0
+            .results
+            .borrow()
+            .iter()
+            .map(|&i| entries[i].name.clone())
+            .collect()
+    }
+    fn query(launcher: &Launcher, text: &str) -> Vec<String> {
+        launcher.0.input.set_text(text);
+        names(launcher)
+    }
+    fn list_height(launcher: &Launcher) -> i32 {
+        launcher.0.list.measure(gtk::Orientation::Vertical, -1).1
+    }
+    fn row_count(launcher: &Launcher) -> usize {
+        let mut n = 0;
+        let mut child = launcher.0.list.first_child();
+        while let Some(c) = child {
+            n += 1;
+            child = c.next_sibling();
+        }
+        n
+    }
+    fn saved(root: &std::path::Path) -> Config {
+        state::load::<Config>(&root.join("luma-launcher/config.toml")).unwrap()
+    }
+    fn pump(rounds: u32) {
+        let context = glib::MainContext::default();
+        for _ in 0..rounds {
+            while context.iteration(false) {}
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
+    /// Drive each control in the Settings window the way a user does, then
+    /// check both what was saved and what changed on screen.
+    fn every_setting_takes_effect(launcher: &Launcher, root: &std::path::Path) {
+        // Let startup discovery/usage import finish, then use known apps.
+        for _ in 0..500 {
+            if !launcher.0.indexing.get() {
+                break;
+            }
+            pump(1);
+        }
+        pump(20);
+        *launcher.0.entries.borrow_mut() = vec![
+            app("firefox.desktop", "Firefox", "Web Browser", "internet web"),
+            app("brave.desktop", "Brave Browser", "Private web surfing", ""),
+            app(
+                "code.desktop",
+                "Visual Studio Code",
+                "Code Editing",
+                "development ide",
+            ),
+        ];
+        launcher.0.system.borrow_mut().clear();
+        launcher.invalidate();
+        let ui = Controls::open(launcher);
+        let reset = |ui: &Controls| {
+            ui.commit("Font size", "19");
+            ui.commit("Visible results", "8");
+            ui.commit("Window width", "680");
+            ui.set("compact layout", false);
+            ui.set("descriptions", true);
+            ui.set("fuzzy matching", true);
+            ui.set("clear search on opening", true);
+            ui.set("system app usage", false);
+            ui.set("launch history", true);
+            launcher.0.input.set_text("");
+        };
+        reset(&ui);
+
+        // Font size: the whole result list scales, not just the search box.
+        let normal = list_height(launcher);
+        let css_before = launcher.0.provider.to_str().to_string();
+        ui.commit("Font size", "32");
+        assert_eq!(launcher.0.config.borrow().font_size, 32);
+        assert_eq!(saved(root).font_size, 32);
+        assert!(launcher.0.provider.to_str().contains("32px"));
+        assert_ne!(launcher.0.provider.to_str(), css_before);
+        let large = list_height(launcher);
+        assert!(large > normal + 60, "rows grew {normal} -> {large}");
+        ui.commit("Font size", "12");
+        assert!(list_height(launcher) < normal, "rows shrink at 12px");
+        for invalid in ["11", "33", "big", ""] {
+            ui.commit("Font size", invalid);
+            assert_eq!(
+                launcher.0.config.borrow().font_size,
+                12,
+                "{invalid:?} rejected"
+            );
+        }
+        ui.commit("Font size", "19");
+        assert_eq!(list_height(launcher), normal);
+
+        // Window width applies the next time the palette is shown.
+        ui.commit("Window width", "900");
+        assert_eq!(saved(root).width, 900);
+        assert_eq!(launcher.0.window.default_size().0, 900);
+        launcher.command("--show");
+        assert_eq!(launcher.0.window.default_size().0, 900, "used when shown");
+        launcher.hide();
+        ui.commit("Window width", "5000");
+        assert_eq!(
+            launcher.0.config.borrow().width,
+            900,
+            "out of range rejected"
+        );
+        ui.commit("Window width", "680");
+        assert_eq!(launcher.0.window.default_size().0, 680);
+
+        // Visible results caps the list.
+        assert_eq!(row_count(launcher), 3);
+        ui.commit("Visible results", "2");
+        assert_eq!(saved(root).results, 2);
+        assert_eq!(row_count(launcher), 2);
+        for invalid in ["0", "21", "many"] {
+            ui.commit("Visible results", invalid);
+            assert_eq!(
+                launcher.0.config.borrow().results,
+                2,
+                "{invalid:?} rejected"
+            );
+        }
+        ui.commit("Visible results", "8");
+        assert_eq!(row_count(launcher), 3);
+
+        // Accent colour reaches the stylesheet; junk is refused.
+        let before = launcher.0.provider.to_str().to_string();
+        ui.commit("Accent (#RRGGBB)", "#12abef");
+        assert_eq!(saved(root).accent, "#12abef");
+        assert_ne!(launcher.0.provider.to_str(), before);
+        ui.commit("Accent (#RRGGBB)", "red");
+        assert_eq!(launcher.0.config.borrow().accent, "#12abef");
+        ui.commit("Accent (#RRGGBB)", "#8da9ff");
+
+        // Shortcut trigger is stored (re-bound when a portal session exists).
+        ui.commit("Portal shortcut", "CTRL+space");
+        assert_eq!(saved(root).shortcut, "CTRL+space");
+        ui.commit("Portal shortcut", "");
+        assert_eq!(
+            launcher.0.config.borrow().shortcut,
+            "CTRL+space",
+            "empty rejected"
+        );
+        ui.commit("Portal shortcut", "ALT+space");
+
+        // Compact layout tightens rows.
+        let roomy = list_height(launcher);
+        ui.set("compact layout", true);
+        assert!(saved(root).compact);
+        assert!(list_height(launcher) < roomy);
+        ui.set("compact layout", false);
+        assert_eq!(list_height(launcher), roomy);
+
+        // The Settings button on the launcher follows its checkbox.
+        // The widget's own flag: `is_visible()` also needs the hidden window.
+        let shown = || launcher.0.settings_button.property::<bool>("visible");
+        assert!(!shown());
+        ui.set("Show Settings button on launcher", true);
+        assert!(saved(root).show_settings_button);
+        assert!(shown());
+        ui.set("Show Settings button on launcher", false);
+        assert!(!shown());
+
+        // Descriptions: shown under names and searchable only when on.
+        assert_eq!(query(launcher, "surfing"), ["Brave Browser"]);
+        ui.set("descriptions", false);
+        assert!(!saved(root).descriptions);
+        launcher.0.input.set_text("");
+        assert!(list_height(launcher) < roomy, "description lines removed");
+        assert!(query(launcher, "surfing").is_empty());
+        ui.set("descriptions", true);
+        assert_eq!(query(launcher, "surfing"), ["Brave Browser"]);
+
+        // Fuzzy matching: "brve" only matches while enabled.
+        assert_eq!(query(launcher, "brve"), ["Brave Browser"]);
+        ui.set("fuzzy matching", false);
+        assert!(!saved(root).fuzzy);
+        assert!(query(launcher, "brve").is_empty());
+        assert_eq!(
+            query(launcher, "brave"),
+            ["Brave Browser"],
+            "plain match unaffected"
+        );
+        ui.set("fuzzy matching", true);
+
+        // Clear search on opening.
+        launcher.0.input.set_text("abc");
+        launcher.hide();
+        launcher.command("--show");
+        assert_eq!(launcher.query(), "", "cleared on open");
+        launcher.hide();
+        ui.set("clear search on opening", false);
+        assert!(!saved(root).clear_on_show);
+        launcher.0.input.set_text("abc");
+        launcher.command("--show");
+        assert_eq!(launcher.query(), "abc", "kept on open");
+        launcher.hide();
+        ui.set("clear search on opening", true);
+        launcher.0.input.set_text("");
+
+        // Launch history records only while enabled.
+        launcher.0.state.borrow_mut().usage.clear();
+        ui.set("launch history", false);
+        assert!(!saved(root).history);
+        assert!(!launcher.record_launch("brave.desktop".into()));
+        assert!(launcher.0.state.borrow().usage.is_empty());
+        ui.set("launch history", true);
+        assert!(launcher.record_launch("brave.desktop".into()));
+        assert_eq!(launcher.0.state.borrow().usage["brave.desktop"].count, 1);
+
+        // System app usage reorders the empty view only while enabled.
+        launcher.0.state.borrow_mut().usage.clear();
+        launcher.0.system.borrow_mut().insert(
+            "code.desktop".into(),
+            Usage {
+                count: 500,
+                last: 9,
+            },
+        );
+        launcher.invalidate();
+        ui.set("system app usage", false);
+        assert!(!saved(root).system_usage);
+        assert_eq!(
+            query(launcher, "")[0],
+            "Brave Browser",
+            "alphabetical when off"
+        );
+        ui.set("system app usage", true);
+        assert!(saved(root).system_usage);
+        assert_eq!(
+            query(launcher, "")[0],
+            "Visual Studio Code",
+            "desktop usage when on"
+        );
+        ui.set("system app usage", false);
+
+        // Theme cycles dark -> light -> system -> dark and system follows the desktop.
+        let theme = ui.button("Theme:");
+        assert_eq!(launcher.0.config.borrow().theme, "dark");
+        assert!(!launcher.is_light(&launcher.0.config.borrow()));
+        theme.emit_clicked();
+        assert_eq!(saved(root).theme, "light");
+        assert!(launcher.is_light(&launcher.0.config.borrow()));
+        assert_eq!(theme.label().unwrap(), "Theme: light (click to cycle)");
+        theme.emit_clicked();
+        assert_eq!(saved(root).theme, "system");
+        launcher.0.system_dark.set(Some(true));
+        assert!(
+            !launcher.is_light(&launcher.0.config.borrow()),
+            "system dark"
+        );
+        launcher.0.system_dark.set(Some(false));
+        assert!(
+            launcher.is_light(&launcher.0.config.borrow()),
+            "system light"
+        );
+        theme.emit_clicked();
+        assert_eq!(saved(root).theme, "dark");
+        assert!(!launcher.is_light(&launcher.0.config.borrow()));
+
+        // Start at login creates and removes Luma's autostart entry.
+        let autostart_entry = root.join("autostart/io.github.luma_launcher.LumaLauncher.desktop");
+        let login = ui.button("Start at login");
+        assert_eq!(login.label().unwrap(), "Start at login: off");
+        login.emit_clicked();
+        assert!(autostart_entry.exists());
+        assert_eq!(login.label().unwrap(), "Start at login: on");
+        login.emit_clicked();
+        assert!(!autostart_entry.exists());
+        assert_eq!(login.label().unwrap(), "Start at login: off");
+
+        // Destructive buttons need a second click.
+        launcher
+            .0
+            .state
+            .borrow_mut()
+            .usage
+            .insert("x.desktop".into(), Usage { count: 1, last: 1 });
+        let erase = ui.button("Clear launch history");
+        erase.emit_clicked();
+        assert!(
+            !launcher.0.state.borrow().usage.is_empty(),
+            "first click only arms"
+        );
+        assert!(erase.label().unwrap().starts_with("Click again"));
+        erase.emit_clicked();
+        assert!(
+            launcher.0.state.borrow().usage.is_empty(),
+            "second click clears"
+        );
+        launcher
+            .0
+            .state
+            .borrow_mut()
+            .favorites
+            .insert("x.desktop".into());
+        let wipe = ui.button("Reset personalization");
+        wipe.emit_clicked();
+        assert!(!launcher.0.state.borrow().favorites.is_empty());
+        wipe.emit_clicked();
+        assert!(launcher.0.state.borrow().favorites.is_empty());
+
+        // Everything on screen was persisted.
+        let on_disk = saved(root);
+        let live = launcher.0.config.borrow();
+        assert_eq!(
+            toml::to_string(&on_disk).unwrap(),
+            toml::to_string(&*live).unwrap()
+        );
+        drop(live);
+        let window = launcher.0.settings.borrow().clone().unwrap();
+        window.close();
     }
 }

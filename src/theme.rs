@@ -27,6 +27,13 @@ const DARK: Palette = Palette {
     selection: "#333c58",
 };
 
+/// Font size the stylesheet's fixed sizes were designed around.
+pub const BASE_FONT: i32 = 19;
+/// Scale a pixel size designed for `BASE_FONT` to the configured font size.
+pub fn scaled(font_size: i32, base_px: i32, min_px: i32) -> i32 {
+    ((base_px as f32 * font_size as f32 / BASE_FONT as f32).round() as i32).max(min_px)
+}
+
 pub fn stylesheet(cfg: &Config, light: bool) -> String {
     let Palette {
         canvas,
@@ -39,6 +46,8 @@ pub fn stylesheet(cfg: &Config, light: bool) -> String {
     let accent = &cfg.accent;
     let font_size = cfg.font_size;
     let row_padding = if cfg.compact { 6 } else { 10 };
+    let name_px = scaled(font_size, 15, 11);
+    let small_px = scaled(font_size, 12, 10);
 
     format!(
         r#"
@@ -50,10 +59,10 @@ window.luma.launcher {{ background: transparent; }}
 .luma row {{ background: transparent; color: {text}; padding: {row_padding}px 12px; border-left: 3px solid transparent; border-radius: 9px; }}
 .luma row:hover {{ background: {surface}; }}
 .luma row:selected, .luma row:selected:hover {{ background: {selection}; color: {text}; border-left-color: {accent}; outline: none; }}
-.luma .result-name {{ font-weight: 600; }}
+.luma .result-name {{ font-weight: 600; font-size: {name_px}px; }}
 .luma .search-bar {{ padding-bottom: 8px; border-bottom: 1px solid {border}; margin-bottom: 8px; }}
 .luma .search-bar button {{ margin: 10px 4px; padding: 6px 10px; }}
-.luma .description, .luma .footer {{ color: {muted}; font-size: 12px; }}
+.luma .description, .luma .footer {{ color: {muted}; font-size: {small_px}px; }}
 .luma row:selected label {{ color: {text}; }}
 .luma .footer {{ padding: 12px; border-top: 1px solid {border}; }}
 .luma .settings {{ padding: 20px 24px; }}
@@ -116,6 +125,32 @@ pub(crate) fn assert_stylesheets_parse() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn font_size_scales_every_launcher_text_size() {
+        let at = |font_size| {
+            stylesheet(
+                &Config {
+                    font_size,
+                    ..Config::default()
+                },
+                false,
+            )
+        };
+        // Defaults are unchanged from the original fixed sizes.
+        let default = at(BASE_FONT);
+        assert!(default.contains("font-size: 19px"));
+        assert!(default.contains("font-weight: 600; font-size: 15px"));
+        assert!(default.contains("font-size: 12px; }"));
+        let large = at(32);
+        assert!(large.contains("entry.search") && large.contains("font-size: 32px"));
+        assert!(large.contains("font-weight: 600; font-size: 25px"));
+        assert!(large.contains("font-size: 20px; }"));
+        let small = at(12);
+        assert!(small.contains("font-weight: 600; font-size: 11px"));
+        assert!(small.contains("font-size: 10px; }"));
+        assert_eq!(scaled(32, 36, 24), 61);
+    }
 
     #[test]
     fn scrollbar_slider_cannot_go_negative() {
