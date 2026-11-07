@@ -1501,6 +1501,15 @@ mod tests {
     fn list_height(launcher: &Launcher) -> i32 {
         launcher.0.list.measure(gtk::Orientation::Vertical, -1).1
     }
+    /// Description lines currently shown in the result list. Counted rather
+    /// than measured: row height also depends on icon size and fonts.
+    fn description_labels(launcher: &Launcher) -> usize {
+        let mut all = vec![];
+        widgets(launcher.0.list.upcast_ref(), &mut all);
+        all.iter()
+            .filter(|w| w.has_css_class("description"))
+            .count()
+    }
     fn row_count(launcher: &Launcher) -> usize {
         let mut n = 0;
         let mut child = launcher.0.list.first_child();
@@ -1654,10 +1663,11 @@ mod tests {
 
         // Descriptions: shown under names and searchable only when on.
         assert_eq!(query(launcher, "surfing"), ["Brave Browser"]);
+        assert_eq!(description_labels(launcher), 1, "description shown");
         ui.set("descriptions", false);
         assert!(!saved(root).descriptions);
         launcher.0.input.set_text("");
-        assert!(list_height(launcher) < roomy, "description lines removed");
+        assert_eq!(description_labels(launcher), 0, "description lines removed");
         assert!(query(launcher, "surfing").is_empty());
         ui.set("descriptions", true);
         assert_eq!(query(launcher, "surfing"), ["Brave Browser"]);
