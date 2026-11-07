@@ -78,7 +78,7 @@ window.luma.launcher {{ background: transparent; }}
 .luma headerbar button {{ background: transparent; border-color: transparent; }}
 .luma headerbar button:hover {{ background: {selection}; }}
 .luma scrollbar, .luma scrollbar trough {{ background: {canvas}; border: none; }}
-.luma scrollbar slider {{ background: {border}; border: 1px solid {muted}; border-radius: 9px; min-width: 6px; min-height: 6px; }}
+.luma scrollbar slider {{ background: {border}; border: 1px solid {muted}; border-radius: 9px; margin: 0; padding: 0; min-width: 6px; min-height: 6px; }}
 .luma scrollbar slider:hover {{ background: {muted}; }}
 .luma popover contents {{ background: {surface}; color: {text}; border: 1px solid {border}; }}
 "#
@@ -123,6 +123,21 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn scrollbar_slider_cannot_go_negative() {
+        // Theme margins plus our border once summed below zero (GTK warns
+        // "reported min width -4"); the slider must reset them.
+        let css = stylesheet(&Config::default(), false);
+        let rule = css
+            .lines()
+            .find(|l| l.contains("scrollbar slider {"))
+            .unwrap();
+        assert!(
+            rule.contains("margin: 0") && rule.contains("padding: 0"),
+            "{rule}"
+        );
     }
 
     #[test]
