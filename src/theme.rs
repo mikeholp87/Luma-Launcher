@@ -85,45 +85,37 @@ window.luma.launcher {{ background: transparent; }}
     )
 }
 
+/// Every theme/preference combination must parse without GTK CSS errors.
+/// Needs an initialised GTK, so the single GTK test in `ui.rs` calls it.
+#[cfg(test)]
+pub(crate) fn assert_stylesheets_parse() {
+    use gtk4 as gtk;
+    use std::{cell::RefCell, rc::Rc};
+    for light in [false, true] {
+        for cfg in [
+            Config::default(),
+            Config {
+                accent: "#12abef".into(),
+                font_size: 32,
+                compact: true,
+                ..Config::default()
+            },
+        ] {
+            let provider = gtk::CssProvider::new();
+            let errors = Rc::new(RefCell::new(Vec::new()));
+            let captured = errors.clone();
+            provider.connect_parsing_error(move |_, _, error| {
+                captured.borrow_mut().push(error.to_string());
+            });
+            provider.load_from_data(&stylesheet(&cfg, light));
+            assert!(errors.borrow().is_empty(), "{:?}", errors.borrow());
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gtk::{self as g, c};
-    use glib::{prelude::*, translate::*};
-    use std::{cell::RefCell, rc::Rc};
-
-    #[test]
-    fn gtk_accepts_both_themes_and_custom_preferences() {
-        for light in [false, true] {
-            for cfg in [
-                Config::default(),
-                Config {
-                    accent: "#12abef".into(),
-                    font_size: 32,
-                    compact: true,
-                    ..Config::default()
-                },
-            ] {
-                unsafe {
-                    let provider: glib::Object = from_glib_full(g::gtk_css_provider_new().cast());
-                    let errors = Rc::new(RefCell::new(Vec::new()));
-                    let captured = errors.clone();
-                    provider.connect_local("parsing-error", false, move |values| {
-                        captured
-                            .borrow_mut()
-                            .push(values[2].get::<glib::Error>().unwrap().to_string());
-                        None
-                    });
-                    g::gtk_css_provider_load_from_data(
-                        provider.as_ptr().cast(),
-                        c(&stylesheet(&cfg, light)).as_ptr(),
-                        -1,
-                    );
-                    assert!(errors.borrow().is_empty(), "{:?}", errors.borrow());
-                }
-            }
-        }
-    }
 
     #[test]
     fn scrollbar_slider_cannot_go_negative() {
