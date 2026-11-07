@@ -1,12 +1,12 @@
 use gio::prelude::*;
 
-fn desktop(extra: &str) -> gio::DesktopAppInfo {
+fn desktop(extra: &str) -> gio_unix::DesktopAppInfo {
     let key = glib::KeyFile::new();
     key.load_from_data(
         &format!("[Desktop Entry]\nType=Application\nName=Luma Test\nExec=/usr/bin/true\nIcon=application-x-executable\n{extra}"),
         glib::KeyFileFlags::NONE,
     ).unwrap();
-    gio::DesktopAppInfo::from_keyfile(&key).unwrap()
+    gio_unix::DesktopAppInfo::from_keyfile(&key).unwrap()
 }
 #[test]
 fn visibility_and_metadata() {

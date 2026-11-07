@@ -27,15 +27,16 @@ Existing desktop shortcut assignments are never rewritten. Portal requests are
 asynchronous; cancellation/failure produces a status message. The backend has not
 been live-tested. Bus loss/restart and portal restart recovery need desktop testing.
 
-Unsafe code is confined to GTK ABI declarations and UI calls, all on GTK's main
-thread. This is a material review surface; migrating to gtk-rs is recommended once
-dependencies can be fetched. No unsafe thread transfers of widget pointers occur.
+The application crates forbid `unsafe` code (`#![forbid(unsafe_code)]`); all
+unsafe FFI lives in the maintained gtk-rs bindings. Widgets are only touched on
+GTK's main thread, and worker threads exchange plain owned data.
 
 Validation performed: arithmetic/URL/config tests, GIO fixture launch, strict
 Clippy, shell lint, desktop-entry validation, and Gitleaks (no secrets found).
-The initial concurrent scan encountered disappearing build objects; rerun scans
-after builds finish. Dependency vulnerability auditing is **not completed**:
-cargo-audit is absent and network DNS is unavailable. The audit found and backported the upstream fix for [RUSTSEC-2024-0429](https://rustsec.org/advisories/RUSTSEC-2024-0429.html) in vendored GLib. The unpatched optimized iterator test crashed with SIGSEGV; it now passes. See [backport provenance](../vendor/README.md). This targeted check is not a complete advisory scan.
+Dependency auditing: `cargo audit --deny warnings` runs in CI. The earlier GLib 0.18
+iterator crash ([RUSTSEC-2024-0429](https://rustsec.org/advisories/RUSTSEC-2024-0429.html))
+and the unmaintained `proc-macro-error` dependency are gone with the move to
+glib/gio 0.22; the vendored patch was removed.
 
 Before production release: run an updated RustSec audit, migrate or independently
 review GTK FFI, exercise portal denial/restart and session loss, inspect all

@@ -20,7 +20,7 @@ fn gio_forwards_unregistered_command_flags() {
     );
     app.connect_command_line(|_, cmd| {
         assert_eq!(cmd.arguments()[1], "--show");
-        0
+        0.into()
     });
     assert_eq!(
         app.run_with_args(&["luma-test", "--show"]),

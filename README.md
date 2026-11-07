@@ -90,14 +90,12 @@ launching instead of interpreting desktop-entry commands itself.
 |---|---|
 | Operating system | Linux; Debian Stable and Testing are the intended package targets |
 | Desktop | A graphical GTK4-compatible session with session D-Bus |
-| Toolchain | Current stable Rust and Cargo; development used Rust 1.96 |
+| Toolchain | Rust 1.92 or newer (the gtk-rs 0.11 MSRV) and Cargo |
 | Native libraries | GTK4 runtime, GLib/GIO, a C linker, and pkg-config |
 | Packaging tools | dpkg-dev and desktop-file-utils for Debian packaging |
 
-The interface currently uses a small GTK4 ABI module and Rust GIO/GLib bindings.
-A migration to gtk-rs is planned when dependencies can be fetched and validated.
-The cached GLib dependency includes an explicit upstream security backport;
-[provenance and maintenance notes](vendor/README.md) are included.
+The interface uses the maintained gtk-rs bindings (`gtk4`, `gio`, `glib` 0.22
+and `gio-unix`), and the application crates forbid `unsafe` code.
 
 ## Build from source (Linux)
 
@@ -119,8 +117,10 @@ cargo build --locked --release
 ./target/release/luma-launcher --show
 ```
 
-Run graphical commands from your normal desktop session, without sudo. If Cargo's
-registry cache is already populated, add `--offline` to build and test commands.
+Run graphical commands from your normal desktop session, without sudo. Building
+fetches crates from crates.io; once the registry cache is populated, `--offline`
+also works. GTK widget tests need a display and skip themselves without one; run
+them headless with `xvfb-run -a cargo test --locked`.
 The application itself does not require network access for application search.
 Web searches and URLs intentionally open the user's browser.
 
@@ -330,15 +330,15 @@ cargo test --locked --release --test glib_variant
 bash scripts/test-install.sh
 ```
 
-`bash scripts/test.sh` runs the same core checks using the offline cache.
+`bash scripts/test.sh` runs the same core checks (under Xvfb when it is installed).
 Shell scripts are also checked with ShellCheck and shfmt.
 
-The pre-publication source snapshot has **30 passing tests and one ignored graphical test**.
+The CI run is the authority on the current test count. The suite includes a
+widget test that needs a display (it skips itself without one and runs under Xvfb in CI).
 Coverage includes matching/ranking, Unicode, input limits, config corruption,
 concurrent persistence, portal response parsing, keyboard-controller setup, theme CSS parsing/contrast,
 calculator/URL safety, GIO launching, XDG precedence, and installer path quoting.
-The vendored upstream dependency retains 34 existing Rust style/lifetime warnings;
-application code passes strict Clippy.
+Application code passes strict Clippy, and `cargo audit --deny warnings` is clean.
 
 Actual KDE/GNOME shortcut registration, multi-monitor/HiDPI behavior, suspend/resume,
 resident resource use, and Stable package installation remain unverified.
@@ -375,12 +375,10 @@ scripts/      Build checks, local installation/removal, autostart, and packaging
 packaging/    Desktop entry and Debian Stable container recipe
 debian/       Debian package metadata
 docs/         Architecture, setup, security, audits, and test reports
-vendor/       Documented GLib security backport and upstream licensing
 ```
 
 Read the [architecture guide](docs/architecture.md) for lifecycle and data flow.
-Future work is tracked in the verification report: maintained gtk-rs bindings,
-real desktop integration tests, Stable package validation, richer settings, and
+Future work is tracked in the verification report: real desktop integration tests, Stable package validation, richer settings, and
 search/rendering refinements justified by measurements.
 
 ## Troubleshooting
@@ -433,6 +431,4 @@ notes are in [AGENTS.md](AGENTS.md).
 
 ## License
 
-Luma Launcher is available under the [MIT License](LICENSE). Vendored GLib retains
-its [upstream license](vendor/glib/LICENSE), copyright notices, and documented
-security-patch provenance.
+Luma Launcher is available under the [MIT License](LICENSE).

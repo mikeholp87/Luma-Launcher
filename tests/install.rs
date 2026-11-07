@@ -40,7 +40,7 @@ fn installed_entry_uses_its_binary_without_session_path() {
         .unwrap()
         .success());
     let entry = data.join("applications/io.github.luma_launcher.LumaLauncher.desktop");
-    let info = gio::DesktopAppInfo::from_filename(&entry).unwrap();
+    let info = gio_unix::DesktopAppInfo::from_filename(&entry).unwrap();
     assert!(
         info.commandline()
             .unwrap()
@@ -68,7 +68,7 @@ fn installed_entry_uses_its_binary_without_session_path() {
             glib::KeyFileFlags::NONE,
         )
         .unwrap();
-    gio::DesktopAppInfo::from_keyfile(&keyfile)
+    gio_unix::DesktopAppInfo::from_keyfile(&keyfile)
         .unwrap()
         .launch(&[], Some(&context))
         .unwrap();

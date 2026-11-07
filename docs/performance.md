@@ -39,3 +39,18 @@ presentation, and measure at least 100 activations. Sample `/proc/PID/status` wh
 hidden/visible and CPU ticks over 60 seconds idle. Keep compositor presentation and
 launched-application startup separate. Repeat with both desktop environments and
 Wayland/X11. Use `scripts/benchmark.sh` for the reproducible noninteractive subset.
+
+## gtk-rs migration check
+
+Head-to-head, same machine, `hyperfine -N --warmup 5 --runs 60`, release builds
+before (GTK ABI shim, glib 0.18) and after (gtk4 0.11, glib/gio 0.22):
+
+| Command | Before | After |
+|---|---:|---:|
+| `--version` | 23.0 ± 4.9 ms | 20.9 ± 5.0 ms |
+| `--diagnostics` | 53.6 ± 9.7 ms | 61.0 ± 16.4 ms (ranges overlap; minimums 41.6 vs 41.2 ms) |
+
+Binary size 1,350,960 → 1,344,176 bytes; `ldd` lists the same 114 lines. Resident
+memory under Broadway stayed flat (about 68 MB) across 100 palette toggles and 40
+Settings open/close cycles, so no window or closure leaks were observed. This is
+an isolated headless run, not compositor latency.

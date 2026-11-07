@@ -8,7 +8,7 @@ Keep platform-specific implementations and their documentation together.
 
 ## Build, Test, and Development Commands
 
-Linux builds require Rust, pkg-config, GLib/GIO and GTK4 development libraries. Use `cargo build --locked`, `cargo test --locked`, and `cargo build --locked --release`; see README.md for prerequisites and further checks. The Windows preview requires Windows PowerShell 5.1 and WPF; run it with `powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\windows\LumaLauncher.ps1`. It has no build step.
+Linux builds require Rust, pkg-config, GLib/GIO and GTK4 development libraries. Rust 1.92+ is required. Use `cargo build --locked`, `cargo test --locked`, and `cargo build --locked --release`; the single GTK widget test needs a display and skips itself without one (run `xvfb-run -a cargo test --locked` for it). See README.md for prerequisites and further checks. The Windows preview requires Windows PowerShell 5.1 and WPF; run it with `powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\windows\LumaLauncher.ps1`. It has no build step.
 
 For repository exploration, use `rg --files --hidden` to list files and `rg "pattern" <path>` to search content. Prefix shell commands with `rtk`; use `rtk proxy <command>` for commands that need unfiltered output.
 

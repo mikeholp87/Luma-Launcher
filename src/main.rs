@@ -1,10 +1,9 @@
-mod gtk;
+#![forbid(unsafe_code)]
 mod portal;
 mod theme;
 mod ui;
-use gio::prelude::*;
-use glib::translate::*;
-fn main() {
+use gtk4::{self as gtk, prelude::*};
+fn main() -> glib::ExitCode {
     let args: Vec<String> = std::env::args().collect();
     let known = [
         "--show",
@@ -24,11 +23,11 @@ fn main() {
     match args.get(1).map(String::as_str) {
         Some("--version") => {
             println!("Luma Launcher {}", env!("CARGO_PKG_VERSION"));
-            return;
+            return glib::ExitCode::SUCCESS;
         }
         Some("--diagnostics") => {
             ui::diagnostics();
-            return;
+            return glib::ExitCode::SUCCESS;
         }
         _ => {}
     }
@@ -36,16 +35,10 @@ fn main() {
         eprintln!("Cannot access session D-Bus; refusing to start an uncoordinated instance: {e}");
         std::process::exit(1);
     }
-    // SAFETY: GTK creates a GApplication subclass; ownership is transferred once.
-    let app: gio::Application = unsafe {
-        from_glib_full(
-            gtk::gtk_application_new(
-                gtk::c("io.github.luma_launcher.LumaLauncher").as_ptr(),
-                gio::ApplicationFlags::HANDLES_COMMAND_LINE.into_glib(),
-            )
-            .cast::<gio::ffi::GApplication>(),
-        )
-    };
+    let app = gtk::Application::builder()
+        .application_id("io.github.luma_launcher.LumaLauncher")
+        .flags(gio::ApplicationFlags::HANDLES_COMMAND_LINE)
+        .build();
     let runtime = std::rc::Rc::new(std::cell::RefCell::new(None));
     let r = runtime.clone();
     app.connect_startup(move |app| {
@@ -57,7 +50,7 @@ fn main() {
         if let Some(l) = runtime.borrow().as_ref() {
             l.command(arg)
         };
-        0
+        0.into()
     });
-    app.run();
+    app.run()
 }

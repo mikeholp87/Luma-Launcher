@@ -17,10 +17,13 @@ bounded frequency, normalized name, then desktop ID. The initial matcher is a
 Unicode subsequence matcher, not nucleo. Search and bounded row construction
 currently run synchronously on the GTK thread; measurements are in performance.md.
 
-GTK4 is called through the isolated `src/gtk.rs` ABI declarations and UI functions.
-GObject signals use GLib's reference-counted wrappers. All widget calls occur on
-the main thread. This introduces unsafe code and needs interactive validation and
-eventual migration to gtk-rs when dependencies can be fetched.
+GTK4 is used through the typed gtk-rs bindings (`gtk4`, plus `gio-unix` for
+`DesktopAppInfo`); the application crates contain no `unsafe` code
+(`#![forbid(unsafe_code)]`). All widget calls occur on the main thread. Long-lived
+signal closures hold a weak reference to the launcher so windows never keep it
+alive; repeatedly opening Settings does not grow resident memory. Blocking work
+(application discovery, desktop usage import) runs on `gio::spawn_blocking` and is
+awaited with `glib::spawn_future_local`.
 
 Portal setup uses asynchronous GIO D-Bus calls, subscribing to Request.Response
 before issuing each request. Granted bindings toggle the resident application.

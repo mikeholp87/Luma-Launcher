@@ -13,6 +13,9 @@ security patch, not the entire upstream library.
 
 ## Must fix — corrected
 
+> Historical record. Items 1 and the raw GTK ABI layer were later resolved by the
+> gtk-rs migration (glib/gio 0.22, no vendored GLib, no `unsafe` in the application).
+
 1. **Optimized GLib iterator crashes** (`vendor/glib/src/variant_iter.rs`).
    **What:** Luma depends on GLib 0.18.5.
    **Problem:** A string iterator passes an immutable pointer as a mutable C output
