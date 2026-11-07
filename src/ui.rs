@@ -925,7 +925,7 @@ impl Launcher {
         let heading = label("Settings");
         heading.add_css_class("settings-title");
         layout.append(&heading);
-        let help = wrapped("Adjust Luma to suit your workflow. Press Enter to save a field.");
+        let help = wrapped("Adjust Luma to suit your workflow. Changes are saved automatically.");
         help.add_css_class("settings-help");
         layout.append(&help);
         section(&layout, "Display and shortcut");
@@ -951,11 +951,32 @@ impl Launcher {
             field_label.set_mnemonic_widget(Some(&entry));
             row.append(&entry);
             layout.append(&row);
-            entry.connect_activate(clone!(
+            // Saved when the field loses focus (moving to another setting or
+            // closing the window), or on Enter. The field then shows the
+            // value that is actually in effect, so a rejected entry reverts.
+            let commit: Rc<dyn Fn(&gtk::Entry)> = Rc::new(clone!(
                 #[weak(rename_to = t)]
                 self,
-                move |entry| t.field_changed(key, &entry.text())
+                move |entry: &gtk::Entry| {
+                    t.field_changed(key, &entry.text());
+                    entry.set_text(&t.field_value(key));
+                }
             ));
+            entry.connect_activate({
+                let commit = commit.clone();
+                move |entry| commit(entry)
+            });
+            let focus = gtk::EventControllerFocus::new();
+            focus.connect_contains_focus_notify(clone!(
+                #[weak]
+                entry,
+                move |focus| {
+                    if !focus.contains_focus() {
+                        commit(&entry);
+                    }
+                }
+            ));
+            entry.add_controller(focus);
         }
         for (title, key) in [
             ("Cycle theme: dark / light / system", "theme"),
@@ -1029,7 +1050,7 @@ impl Launcher {
         let tips = label("Ctrl+D: pin or unpin    Ctrl+Delete: forget an app");
         tips.add_css_class("settings-help");
         layout.append(&tips);
-        let status = wrapped("Press Enter in a setting field to save it.");
+        let status = wrapped("Changes are saved automatically.");
         status.add_css_class("settings-help");
         layout.append(&status);
         *self.0.settings_status.borrow_mut() = Some(status);
@@ -1038,7 +1059,9 @@ impl Launcher {
             self,
             #[upgrade_or]
             glib::Propagation::Proceed,
-            move |_| {
+            move |window| {
+                // Drop focus first so a field being edited is saved.
+                GtkWindowExt::set_focus(window, None::<&gtk::Widget>);
                 *t.0.settings.borrow_mut() = None;
                 *t.0.settings_status.borrow_mut() = None;
                 glib::Propagation::Proceed
@@ -1047,8 +1070,22 @@ impl Launcher {
         *self.0.settings.borrow_mut() = Some(w.clone());
         w.present();
     }
-    /// A Settings text field was committed with Enter.
+    /// The value a Settings text field currently has in effect.
+    fn field_value(&self, key: &str) -> String {
+        let cfg = self.0.config.borrow();
+        match key {
+            "width" => cfg.width.to_string(),
+            "results" => cfg.results.to_string(),
+            "font_size" => cfg.font_size.to_string(),
+            "accent" => cfg.accent.clone(),
+            _ => cfg.shortcut.clone(),
+        }
+    }
+    /// A Settings text field was committed (Enter or focus loss).
     fn field_changed(&self, key: &str, value: &str) {
+        if value == self.field_value(key) {
+            return;
+        }
         let mut cfg = self.0.config.borrow().clone();
         let valid = match key {
             "width" => value.parse().map(|v| cfg.width = v).is_ok(),
@@ -1422,7 +1459,8 @@ mod tests {
                 .unwrap_or_else(|| panic!("no field {name:?}"))
                 .clone()
         }
-        /// Type into a field and press Enter, as a user would.
+        /// Type into a field and press Enter. (Focus loss saves the same way;
+        /// see `fields_save_when_focus_moves_away`.)
         fn commit(&self, name: &str, text: &str) {
             let entry = self.field(name);
             entry.set_text(text);
@@ -1753,6 +1791,8 @@ mod tests {
         wipe.emit_clicked();
         assert!(launcher.0.state.borrow().favorites.is_empty());
 
+        fields_save_when_focus_moves_away(launcher, &ui, root);
+
         // Everything on screen was persisted.
         let on_disk = saved(root);
         let live = launcher.0.config.borrow();
@@ -1761,7 +1801,52 @@ mod tests {
             toml::to_string(&*live).unwrap()
         );
         drop(live);
+    }
+
+    /// No Enter and no save button: leaving a field saves it, a rejected
+    /// entry reverts to the value in effect, and closing the window with an
+    /// edit pending still saves it.
+    fn fields_save_when_focus_moves_away(
+        launcher: &Launcher,
+        ui: &Controls,
+        root: &std::path::Path,
+    ) {
         let window = launcher.0.settings.borrow().clone().unwrap();
+        let (size, width) = (ui.field("Font size"), ui.field("Window width"));
+        let focus = |w: &gtk::Entry| GtkWindowExt::set_focus(&window, Some(w));
+
+        focus(&size);
+        size.set_text("24");
+        assert_eq!(saved(root).font_size, 19, "not saved while still typing");
+        focus(&width);
+        assert_eq!(saved(root).font_size, 24, "saved on leaving the field");
+        assert_eq!(launcher.0.config.borrow().font_size, 24);
+
+        focus(&size);
+        size.set_text("99");
+        focus(&width);
+        assert_eq!(saved(root).font_size, 24, "invalid value not saved");
+        assert_eq!(size.text(), "24", "field reverts to the value in effect");
+
+        focus(&size);
+        size.set_text("19");
+        focus(&width);
+        assert_eq!(saved(root).font_size, 19);
+
+        // Untouched fields leave the file alone.
+        let modified = |p: &std::path::Path| std::fs::metadata(p).unwrap().modified().unwrap();
+        let path = root.join("luma-launcher/config.toml");
+        let before = modified(&path);
+        focus(&size);
+        focus(&width);
+        assert_eq!(modified(&path), before, "no rewrite without a change");
+
+        // Closing the window while a field is being edited saves it.
+        focus(&size);
+        size.set_text("21");
         window.close();
+        assert_eq!(saved(root).font_size, 21);
+        assert!(launcher.0.settings.borrow().is_none());
+        launcher.0.config.borrow_mut().font_size = 21;
     }
 }
