@@ -1,6 +1,6 @@
 use crate::gtk::{self as g, c, Widget};
 use gio::prelude::*;
-use glib::{translate::*, ToValue};
+use glib::{prelude::ToValue, translate::*};
 use luma_launcher::{
     search::{self, Entry},
     state::{self, Config, State, Usage},
@@ -51,7 +51,7 @@ fn discover() -> Vec<Entry> {
             if !seen.insert(id.clone()) {
                 return None;
             }
-            let d = gio::DesktopAppInfo::new(&id);
+            let d = gio_unix::DesktopAppInfo::new(&id);
             let fields = d
                 .as_ref()
                 .map(|d| {
@@ -393,18 +393,15 @@ impl Launcher {
             g::gtk_window_set_default_size(self.0.window, cfg.width, -1);
         }
     }
-    #[allow(deprecated)]
     fn refresh(&self) {
         if self.0.indexing.replace(true) {
             self.0.refresh_pending.set(true);
             return;
         }
-        let (sender, receiver) = glib::MainContext::channel(glib::Priority::DEFAULT);
-        std::thread::spawn(move || {
-            let _ = sender.send(discover());
-        });
         let t = self.clone();
-        receiver.attach(None, move |entries| {
+        glib::spawn_future_local(async move {
+            // A panicking worker must not leave `indexing` stuck on.
+            let entries = gio::spawn_blocking(discover).await.unwrap_or_default();
             *t.0.entries.borrow_mut() = entries;
             t.0.indexing.set(false);
             t.invalidate();
@@ -414,7 +411,6 @@ impl Launcher {
             if t.0.refresh_pending.replace(false) {
                 t.refresh();
             }
-            glib::ControlFlow::Break
         });
     }
     fn render(&self) {
@@ -575,14 +571,12 @@ impl Launcher {
         }
     }
     /// Read desktop usage off the UI thread (KDE spawns `sqlite3`).
-    #[allow(deprecated)]
     fn harvest(&self) {
-        let (sender, receiver) = glib::MainContext::channel(glib::Priority::DEFAULT);
-        std::thread::spawn(move || {
-            let _ = sender.send(system::harvest());
-        });
         let t = self.clone();
-        receiver.attach(None, move |usage| {
+        glib::spawn_future_local(async move {
+            let usage = gio::spawn_blocking(system::harvest)
+                .await
+                .unwrap_or_default();
             *t.0.system.borrow_mut() = usage;
             t.invalidate();
             // Ranking only matters on screen, and re-rendering mid-typing
@@ -590,7 +584,6 @@ impl Launcher {
             if t.0.visible.get() && t.query().is_empty() {
                 t.render();
             }
-            glib::ControlFlow::Break
         });
     }
     /// Directory monitors fire per write (SQLite WAL is continuous), so
@@ -646,7 +639,7 @@ impl Launcher {
             let Some(id) = self.selected_id() else {
                 return;
             };
-            let Some(app) = gio::DesktopAppInfo::new(&id) else {
+            let Some(app) = gio_unix::DesktopAppInfo::new(&id) else {
                 return;
             };
             let w = g::gtk_application_window_new(self.0.app.as_ptr().cast());
@@ -720,7 +713,7 @@ impl Launcher {
             return;
         }
         if let Some(id) = self.selected_id() {
-            match gio::DesktopAppInfo::new(&id)
+            match gio_unix::DesktopAppInfo::new(&id)
                 .ok_or_else(|| "Application was removed".to_string())
                 .and_then(|a| {
                     luma_launcher::launch::desktop(

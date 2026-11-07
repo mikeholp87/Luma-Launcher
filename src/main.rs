@@ -57,7 +57,7 @@ fn main() {
         if let Some(l) = runtime.borrow().as_ref() {
             l.command(arg)
         };
-        0
+        0.into()
     });
     app.run();
 }

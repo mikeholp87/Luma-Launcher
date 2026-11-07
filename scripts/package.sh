@@ -8,9 +8,6 @@ install -Dm644 packaging/io.github.luma_launcher.LumaLauncher.desktop "$stage/us
 install -Dm644 assets/io.github.luma_launcher.LumaLauncher.svg "$stage/usr/share/icons/hicolor/scalable/apps/io.github.luma_launcher.LumaLauncher.svg"
 install -Dm644 LICENSE "$stage/usr/share/doc/luma-launcher/copyright"
 install -Dm644 README.md "$stage/usr/share/doc/luma-launcher/README.md"
-install -Dm644 vendor/glib/LICENSE "$stage/usr/share/doc/luma-launcher/glib-LICENSE"
-install -Dm644 vendor/glib/COPYRIGHT "$stage/usr/share/doc/luma-launcher/glib-COPYRIGHT"
-install -Dm644 vendor/README.md "$stage/usr/share/doc/luma-launcher/glib-security-backport.md"
 mkdir -p "$stage/DEBIAN" dist
 deps=$(dpkg-shlibdeps -O -e"$stage/usr/bin/luma-launcher")
 deps=${deps#shlibs:Depends=}

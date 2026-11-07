@@ -54,7 +54,7 @@ fn application_output_is_logged_without_polluting_launcher_output() {
                 std::env::current_exe().unwrap().display()
             ),
         );
-        let app = gio::DesktopAppInfo::from_keyfile(&key).unwrap();
+        let app = gio_unix::DesktopAppInfo::from_keyfile(&key).unwrap();
         let context = gio::AppLaunchContext::new();
         context.setenv("LUMA_LAUNCH_TEST_ROLE", "app");
         context.setenv("DISPLAY", ":77");
@@ -125,7 +125,7 @@ fn removed_executable_returns_a_launch_error() {
     key.set_string("Desktop Entry", "Type", "Application");
     key.set_string("Desktop Entry", "Name", "Removed executable");
     key.set_string("Desktop Entry", "Exec", executable.to_str().unwrap());
-    let app = gio::DesktopAppInfo::from_keyfile(&key).unwrap();
+    let app = gio_unix::DesktopAppInfo::from_keyfile(&key).unwrap();
     fs::remove_file(&executable).unwrap();
     let error = launch::desktop(
         &app,
@@ -150,7 +150,7 @@ fn quoted_arguments_are_not_interpreted_as_shell_commands() {
         "Exec",
         "/usr/bin/touch \"literal ; $(touch injected)\"",
     );
-    let app = gio::DesktopAppInfo::from_keyfile(&key).unwrap();
+    let app = gio_unix::DesktopAppInfo::from_keyfile(&key).unwrap();
     launch::desktop(
         &app,
         &gio::AppLaunchContext::new(),
@@ -178,7 +178,7 @@ fn desktop_actions_execute_the_declared_command() {
         "Exec",
         "/usr/bin/touch \"action completed\"",
     );
-    let app = gio::DesktopAppInfo::from_keyfile(&key).unwrap();
+    let app = gio_unix::DesktopAppInfo::from_keyfile(&key).unwrap();
     assert_eq!(app.list_actions(), ["Open"]);
     app.launch_action("Open", Some(&gio::AppLaunchContext::new()));
     wait_for(&root.join("action completed"));
@@ -187,7 +187,7 @@ fn desktop_actions_execute_the_declared_command() {
     // Redirected variant: same command, output log gets a launch header.
     let key_file = root.join("action.desktop");
     fs::write(&key_file, key.to_data().as_str()).unwrap();
-    let app = gio::DesktopAppInfo::from_filename(&key_file).unwrap();
+    let app = gio_unix::DesktopAppInfo::from_filename(&key_file).unwrap();
     let log = root.join("applications.log");
     launch::action(&app, "Open", &gio::AppLaunchContext::new(), &log).unwrap();
     wait_for(&root.join("action completed"));

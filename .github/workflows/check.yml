@@ -16,7 +16,6 @@ jobs:
       - run: cargo test --locked
       - run: cargo install --locked cargo-audit && cargo audit
       - run: cargo build --locked --release
-      - run: cargo test --locked --release --test glib_variant
       - run: bash scripts/test-install.sh
       - run: shellcheck scripts/*.sh && shfmt -d scripts
       - run: desktop-file-validate packaging/*.desktop && bash scripts/package.sh

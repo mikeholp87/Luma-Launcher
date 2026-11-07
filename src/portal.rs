@@ -29,20 +29,20 @@ fn request(
     let sub = subscription.clone();
     let timeout = Rc::new(RefCell::new(None::<glib::SourceId>));
     let response_timeout = timeout.clone();
-    let id = bus.signal_subscribe(
+    let id = bus.subscribe_to_signal(
         Some(DEST),
         Some("org.freedesktop.portal.Request"),
         Some("Response"),
         Some(&path),
         None,
         gio::DBusSignalFlags::NONE,
-        move |bus, _, _, _, _, value| {
+        move |signal| {
+            let value = signal.parameters;
             if let Some(id) = response_timeout.borrow_mut().take() {
                 id.remove();
             }
-            if let Some(id) = sub.borrow_mut().take() {
-                bus.signal_unsubscribe(id);
-            }
+            // Dropping the subscription unsubscribes.
+            sub.borrow_mut().take();
             if let Some(done) = cb.borrow_mut().take() {
                 let result = value
                     .get::<(u32, Options)>()
@@ -68,9 +68,7 @@ fn request(
         std::time::Duration::from_secs(120),
         move || {
             timeout_holder.borrow_mut().take();
-            if let Some(id) = timeout_subscription.borrow_mut().take() {
-                timeout_bus.signal_unsubscribe(id);
-            }
+            timeout_subscription.borrow_mut().take();
             timeout_bus.call(
                 Some(DEST),
                 &timeout_path,
@@ -88,7 +86,6 @@ fn request(
             }
         },
     ));
-    let connection = bus.clone();
     bus.call(
         Some(DEST),
         PATH,
@@ -104,9 +101,7 @@ fn request(
                 if let Some(id) = timeout.borrow_mut().take() {
                     id.remove();
                 }
-                if let Some(id) = subscription.borrow_mut().take() {
-                    connection.signal_unsubscribe(id);
-                }
+                subscription.borrow_mut().take();
                 if let Some(done) = callback.borrow_mut().take() {
                     done(Err(e.to_string()));
                 }
@@ -148,14 +143,12 @@ fn token() -> String {
 pub struct Session {
     bus: gio::DBusConnection,
     path: ObjectPath,
-    subscriptions: Vec<gio::SignalSubscriptionId>,
+    subscriptions: Vec<gio::SignalSubscription>,
     closed: Rc<Cell<bool>>,
 }
 impl Drop for Session {
     fn drop(&mut self) {
-        for id in self.subscriptions.drain(..) {
-            self.bus.signal_unsubscribe(id);
-        }
+        self.subscriptions.clear();
         if self.closed.replace(true) {
             return;
         }
@@ -224,15 +217,15 @@ pub fn bind(
                     let mut options = Options::new();
                     options.insert("handle_token".into(), request_token.to_variant());
                     let activated_path = path.to_string();
-                    session.subscriptions.push(connection.signal_subscribe(
+                    session.subscriptions.push(connection.subscribe_to_signal(
                         Some(DEST),
                         Some(IFACE),
                         Some("Activated"),
                         Some(PATH),
                         None,
                         gio::DBusSignalFlags::NONE,
-                        move |_, _, _, _, _, value| {
-                            if let Some(token) = activation(value, &activated_path) {
+                        move |signal| {
+                            if let Some(token) = activation(signal.parameters, &activated_path) {
                                 on_toggle(token);
                             }
                         },
@@ -240,29 +233,31 @@ pub fn bind(
                     let report: Rc<dyn Fn()> = Rc::new(on_closed);
                     let session_closed = closed.clone();
                     let session_report = report.clone();
-                    session.subscriptions.push(connection.signal_subscribe(
+                    session.subscriptions.push(connection.subscribe_to_signal(
                         Some(DEST),
                         Some("org.freedesktop.portal.Session"),
                         Some("Closed"),
                         Some(path.as_str()),
                         None,
                         gio::DBusSignalFlags::NONE,
-                        move |_, _, _, _, _, _| {
+                        move |_| {
                             if !session_closed.replace(true) {
                                 session_report();
                             }
                         },
                     ));
                     let service_closed = closed.clone();
-                    session.subscriptions.push(connection.signal_subscribe(
+                    session.subscriptions.push(connection.subscribe_to_signal(
                         Some("org.freedesktop.DBus"),
                         Some("org.freedesktop.DBus"),
                         Some("NameOwnerChanged"),
                         Some("/org/freedesktop/DBus"),
                         Some(DEST),
                         gio::DBusSignalFlags::NONE,
-                        move |_, _, _, _, _, value| {
-                            if let Some((_, old, new)) = value.get::<(String, String, String)>() {
+                        move |signal| {
+                            if let Some((_, old, new)) =
+                                signal.parameters.get::<(String, String, String)>()
+                            {
                                 if !old.is_empty() && old != new && !service_closed.replace(true) {
                                     report();
                                 }
