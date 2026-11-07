@@ -12,12 +12,38 @@ pub fn web(query: &str) -> Option<String> {
             return Some(u.into());
         }
     }
-    let u = url::Url::parse(query).ok()?;
+    let u = match url::Url::parse(query) {
+        Ok(u) => u,
+        Err(_) => url::Url::parse(&format!("https://{query}"))
+            .ok()
+            .filter(|_| bare_domain(query))?,
+    };
     (matches!(u.scheme(), "http" | "https")
         && u.host_str().is_some()
         && u.username().is_empty()
         && u.password().is_none())
     .then(|| u.into())
+}
+/// `github.com/rust-lang` style input without a scheme. Only well-known TLDs
+/// qualify so app IDs like `org.gnome.Nautilus` and file names stay searches.
+fn bare_domain(query: &str) -> bool {
+    const TLDS: [&str; 9] = ["com", "org", "net", "io", "dev", "app", "ai", "edu", "gov"];
+    let host = query.split(['/', '?', '#']).next().unwrap_or_default();
+    host.is_ascii()
+        && !host.contains(['@', ':', ' '])
+        && host.rsplit_once('.').is_some_and(|(name, tld)| {
+            !name.is_empty() && TLDS.contains(&tld.to_ascii_lowercase().as_str())
+        })
+}
+/// Human-readable result: no float noise (`0.1+0.2` is `0.3`) and no
+/// exponent-free megastrings for huge values.
+pub fn format_number(v: f64) -> String {
+    if v.abs() >= 1e15 {
+        return format!("{v:e}");
+    }
+    let s = format!("{v:.10}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s == "-0" { "0" } else { s }.to_string()
 }
 pub fn calculate(s: &str) -> Result<f64, &'static str> {
     if s.len() > 256 || !s.is_ascii() {
@@ -142,6 +168,36 @@ mod tests {
         assert!(web("ddg rust & gtk").unwrap().contains("rust+%26+gtk"));
     }
 
+    #[test]
+    fn bare_domains_open_but_app_ids_do_not() {
+        assert_eq!(
+            web("github.com/rust-lang").unwrap(),
+            "https://github.com/rust-lang"
+        );
+        assert!(web("example.org").is_some());
+        for q in [
+            "org.gnome.Nautilus",
+            "notes.md",
+            "firefox",
+            "a b.com",
+            "user@site.com",
+        ] {
+            assert!(web(q).is_none(), "{q}");
+        }
+    }
+    #[test]
+    fn numbers_format_without_float_noise() {
+        for (v, expected) in [
+            (0.1 + 0.2, "0.3"),
+            (100., "100"),
+            (1. / 3., "0.3333333333"),
+            (-0., "0"),
+            (-2.5, "-2.5"),
+            (1e20, "1e20"),
+        ] {
+            assert_eq!(format_number(v), expected);
+        }
+    }
     #[test]
     fn tool_queries_do_not_select_applications() {
         for q in ["= 2 + 2", " = invalid", "g linux", "https://example.com"] {

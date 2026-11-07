@@ -25,7 +25,7 @@ sharing binaries.
   build, ran its `--version`, and validated its desktop entry and license payload.
 - Final graphical startup correctly refuses to proceed when session-bus access
   is denied. The earlier build also demonstrated the display-access restriction.
-- Follow-up checks: all 11 tests, formatting, strict Clippy, and release build
+- Follow-up checks: the full test suite (see CI for the current count), formatting, strict Clippy, and release build
   pass again. `bash scripts/test-install.sh` passes installation/removal checks
   including spaces in paths, icons, autostart enable/disable, preservation, purge,
   and preservation of unrelated files. ShellCheck and shfmt also pass.

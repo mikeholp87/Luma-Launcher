@@ -1,6 +1,7 @@
 use gio::prelude::*;
 use std::{
     fs::{self, File, OpenOptions},
+    io::Write,
     os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::Path,
 };
@@ -32,6 +33,16 @@ pub fn desktop(
     context: &gio::AppLaunchContext,
     log_path: &Path,
 ) -> Result<(), String> {
+    let label = app.id().map(|id| id.to_string()).unwrap_or_default();
+    run(app, &label, context, log_path)
+}
+
+fn run(
+    app: &gio::DesktopAppInfo,
+    label: &str,
+    context: &gio::AppLaunchContext,
+    log_path: &Path,
+) -> Result<(), String> {
     let log = prepare_log(log_path);
     let mut stdout = match log {
         Ok(file) => file,
@@ -45,6 +56,16 @@ pub fn desktop(
                 .map_err(|e| e.to_string())?
         }
     };
+    // One line per launch so interleaved output stays attributable.
+    let _ = writeln!(
+        stdout,
+        "--- unix={} launch {}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        label
+    );
     let mut stderr = stdout.try_clone().map_err(|e| e.to_string())?;
     let mut stdin = File::open("/dev/null").map_err(|e| e.to_string())?;
     app.launch_uris_as_manager_with_fds(
@@ -58,4 +79,41 @@ pub fn desktop(
         &mut stderr,
     )
     .map_err(|error| format!("Could not open {}: {error}", app.display_name()))
+}
+
+/// Launch a declared desktop action with the same output redirection as
+/// `desktop`: the action's `Exec` replaces the entry's own and GIO does the
+/// rest. Entries without a readable file fall back to plain GIO.
+pub fn action(
+    app: &gio::DesktopAppInfo,
+    action: &str,
+    context: &gio::AppLaunchContext,
+    log_path: &Path,
+) -> Result<(), String> {
+    let launch_plain = || {
+        app.launch_action(action, Some(context));
+        Ok(())
+    };
+    let Some(file) = app.filename() else {
+        return launch_plain();
+    };
+    let key = glib::KeyFile::new();
+    let group = format!("Desktop Action {action}");
+    let Some(exec) = key
+        .load_from_file(&file, glib::KeyFileFlags::NONE)
+        .ok()
+        .and_then(|()| key.string(&group, "Exec").ok())
+    else {
+        return launch_plain();
+    };
+    key.set_string("Desktop Entry", "Exec", &exec);
+    let _ = key.remove_key("Desktop Entry", "DBusActivatable");
+    let label = format!(
+        "{} action {action}",
+        app.id().map(|id| id.to_string()).unwrap_or_default()
+    );
+    match gio::DesktopAppInfo::from_keyfile(&key) {
+        Some(entry) => run(&entry, &label, context, log_path),
+        None => launch_plain(),
+    }
 }

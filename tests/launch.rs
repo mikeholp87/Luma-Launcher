@@ -182,5 +182,15 @@ fn desktop_actions_execute_the_declared_command() {
     assert_eq!(app.list_actions(), ["Open"]);
     app.launch_action("Open", Some(&gio::AppLaunchContext::new()));
     wait_for(&root.join("action completed"));
+    fs::remove_file(root.join("action completed")).unwrap();
+
+    // Redirected variant: same command, output log gets a launch header.
+    let key_file = root.join("action.desktop");
+    fs::write(&key_file, key.to_data().as_str()).unwrap();
+    let app = gio::DesktopAppInfo::from_filename(&key_file).unwrap();
+    let log = root.join("applications.log");
+    launch::action(&app, "Open", &gio::AppLaunchContext::new(), &log).unwrap();
+    wait_for(&root.join("action completed"));
+    assert!(fs::read_to_string(&log).unwrap().contains("action Open"));
     fs::remove_dir_all(root).unwrap();
 }

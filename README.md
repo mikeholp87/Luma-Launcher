@@ -231,7 +231,9 @@ keystrokes or bypass compositor restrictions. See the dedicated
 | Enter | Launch the selected application, open a URL, or copy a calculation |
 | Escape | Hide the palette |
 | Up / Down | Select the previous or next application |
-| Ctrl+K / Ctrl+J | Select the previous or next application |
+| Ctrl+K / Ctrl+J, Ctrl+P / Ctrl+N | Select the previous or next application |
+| Ctrl+1 … Ctrl+9 | Launch the Nth visible result |
+| Esc | Clear the search; press again to close |
 | Ctrl+A | Select search text |
 | Ctrl+, or Ctrl++ | Open Settings |
 | Ctrl+D | Pin or unpin the selected application |
@@ -250,6 +252,7 @@ behavior still needs live desktop verification.
 | `= (250 + 75) * 2` | Calculate with parentheses |
 | `g best linux utilities` | Search Google in the default browser |
 | `ddg rust gtk4 tutorial` | Search DuckDuckGo in the default browser |
+| `github.com/rust-lang` | Open a bare domain (`.com .org .net .io .dev .app .ai .edu .gov`) over HTTPS |
 | `https://www.rust-lang.org/` | Offer to open the URL in the default browser |
 
 The calculator accepts basic arithmetic and bounded nesting, rejects invalid or
@@ -310,7 +313,7 @@ combined usage, most used first and most recently used as a tiebreaker. The
 source follows the session: GNOME Shell's `score` and `last-seen` in
 `~/.local/share/gnome-shell/application_state`, or KDE's activity statistics
 in `~/.local/share/kactivitymanagerd/resources/database` (read through
-`sqlite3 -readonly`). `luma-launcher --diagnostics` prints the source in use.
+`sqlite3 -readonly`; the `sqlite3` CLI must be installed, otherwise KDE usage is skipped). `luma-launcher --diagnostics` prints the source in use and whether `sqlite3` was found.
 Ctrl+Delete removes an application from that combined ranking until it is
 launched through Luma again. Writes use exclusive temporary files, atomic
 replacement, and private state-file permissions. Corrupt files are preserved

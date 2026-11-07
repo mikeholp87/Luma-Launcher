@@ -15,6 +15,7 @@ unsafe extern "C" {
     pub fn gtk_widget_set_visible(w: Widget, b: c_int);
     pub fn gtk_widget_grab_focus(w: Widget) -> c_int;
     pub fn gtk_widget_get_first_child(w: Widget) -> Widget;
+    pub fn gtk_widget_get_parent(w: Widget) -> Widget;
     #[cfg(test)]
     pub fn gtk_widget_get_next_sibling(w: Widget) -> Widget;
     pub fn gtk_widget_add_css_class(w: Widget, class: *const c_char);
@@ -42,6 +43,8 @@ unsafe extern "C" {
     pub fn gtk_list_box_get_row_at_index(w: Widget, index: c_int) -> Widget;
     pub fn gtk_list_box_select_row(w: Widget, row: Widget);
     pub fn gtk_list_box_row_get_index(w: Widget) -> c_int;
+    pub fn gtk_list_box_row_set_selectable(w: Widget, b: c_int);
+    pub fn gtk_list_box_row_set_activatable(w: Widget, b: c_int);
     pub fn gtk_scrolled_window_new() -> Widget;
     pub fn gtk_scrolled_window_set_child(w: Widget, child: Widget);
     pub fn gtk_scrolled_window_set_max_content_height(w: Widget, height: c_int);

@@ -155,6 +155,14 @@ pub fn kde_usage() -> BTreeMap<String, Usage> {
     parse_kde(&String::from_utf8_lossy(&output.stdout))
 }
 
+/// Whether the `sqlite3` CLI that KDE usage import needs is installed.
+pub fn sqlite3_available() -> bool {
+    std::process::Command::new("sqlite3")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
 /// Map a recorded agent name to a launcher desktop file ID. Agents may name
 /// the application without a `.desktop` suffix; anything else (portal paths,
 /// URI-like sources) is not an application.

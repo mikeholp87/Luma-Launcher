@@ -25,6 +25,22 @@ unsafe fn label(s: &str) -> Widget {
     g::gtk_label_set_ellipsize(w, 3);
     w
 }
+/// Informational list row: neither selectable nor activatable.
+unsafe fn note(list: Widget, text: &str) {
+    let l = label(text);
+    g::gtk_list_box_append(list, l);
+    let row = g::gtk_widget_get_parent(l);
+    g::gtk_list_box_row_set_selectable(row, 0);
+    g::gtk_list_box_row_set_activatable(row, 0);
+}
+/// Caps Lock and Shift report letters as uppercase keyvals.
+fn lower_key(key: u32) -> u32 {
+    if (u32::from(b'A')..=u32::from(b'Z')).contains(&key) {
+        key + 32
+    } else {
+        key
+    }
+}
 fn discover() -> Vec<Entry> {
     let mut seen = std::collections::BTreeSet::new();
     gio::AppInfo::all()
@@ -82,6 +98,8 @@ struct Inner {
     state: RefCell<State>,
     system: RefCell<BTreeMap<String, Usage>>,
     system_monitor: RefCell<Option<gio::FileMonitor>>,
+    harvest_pending: Cell<bool>,
+    usage_view: RefCell<Option<Rc<State>>>,
     provider: Widget,
     settings: Cell<Widget>,
     indexing: Cell<bool>,
@@ -131,7 +149,7 @@ impl Launcher {
             g::gtk_scrolled_window_set_max_content_height(scroll, 380);
             g::gtk_scrolled_window_set_propagate_natural_height(scroll, 1);
             g::gtk_box_append(layout, scroll);
-            let status = label("↑↓ Navigate    Enter Open    Esc Close");
+            let status = label("↑↓ Navigate    Enter Open    Ctrl+1–9 Jump    Esc Clear / Close");
             g::gtk_label_set_ellipsize(status, 0);
             g::gtk_label_set_wrap(status, 1);
             g::gtk_widget_add_css_class(status, c("footer").as_ptr());
@@ -162,6 +180,8 @@ impl Launcher {
                 state: RefCell::new(history.unwrap_or_default()),
                 system: RefCell::new(BTreeMap::new()),
                 system_monitor: RefCell::new(None),
+                harvest_pending: Cell::new(false),
+                usage_view: RefCell::new(None),
                 provider,
                 settings: Cell::new(std::ptr::null_mut()),
                 indexing: Cell::new(false),
@@ -222,7 +242,7 @@ impl Launcher {
             g::gtk_widget_add_controller(window, keys);
             let t = this.clone();
             signal(keys, "key-pressed", move |v| {
-                let key = v[1].get::<u32>().unwrap_or(0);
+                let key = lower_key(v[1].get::<u32>().unwrap_or(0));
                 let mods = glib::gobject_ffi::g_value_get_flags(v[3].to_glib_none().0);
                 let ctrl = mods & 4 != 0;
                 let handled = match key {
@@ -231,7 +251,11 @@ impl Launcher {
                         true
                     }
                     65307 => {
-                        t.hide();
+                        if t.query().is_empty() {
+                            t.hide();
+                        } else {
+                            g::gtk_editable_set_text(t.0.input, c("").as_ptr());
+                        }
                         true
                     }
                     65364 => {
@@ -240,6 +264,18 @@ impl Launcher {
                     }
                     65362 => {
                         t.navigate(-1);
+                        true
+                    }
+                    110 if ctrl => {
+                        t.navigate(1);
+                        true
+                    }
+                    112 if ctrl => {
+                        t.navigate(-1);
+                        true
+                    }
+                    49..=57 if ctrl => {
+                        t.quick_launch((key - 49) as usize);
                         true
                     }
                     106 if ctrl => {
@@ -282,10 +318,7 @@ impl Launcher {
                         watch.monitor(gio::FileMonitorFlags::NONE, None::<&gio::Cancellable>)
                     {
                         let t = this.clone();
-                        monitor.connect_changed(move |_, _, _, _| {
-                            t.harvest();
-                            t.render();
-                        });
+                        monitor.connect_changed(move |_, _, _, _| t.schedule_harvest());
                         *this.0.system_monitor.borrow_mut() = Some(monitor);
                     }
                 }
@@ -374,7 +407,10 @@ impl Launcher {
         receiver.attach(None, move |entries| {
             *t.0.entries.borrow_mut() = entries;
             t.0.indexing.set(false);
-            t.render();
+            t.invalidate();
+            if t.0.visible.get() {
+                t.render();
+            }
             if t.0.refresh_pending.replace(false) {
                 t.refresh();
             }
@@ -390,12 +426,7 @@ impl Launcher {
             let q = query.trim();
             let cfg = self.0.config.borrow();
             let entries = self.0.entries.borrow();
-            // Combine the launcher's own launch tally with desktop usage, when
-            // enabled, so the default view reads most-used to least-used.
-            let mut state = self.0.state.borrow().clone();
-            if cfg.system_usage {
-                state.usage = system::merge(&state.usage, &self.0.system.borrow(), &state.ignored);
-            }
+            let state = self.state_view();
             let results = if tools::is_application_query(q) {
                 search::search(
                     &entries,
@@ -409,11 +440,13 @@ impl Launcher {
                 vec![]
             };
             if let Some(expr) = q.strip_prefix('=') {
-                let text = match tools::calculate(expr) {
-                    Ok(v) => format!("{v}   ·   Enter to copy"),
-                    Err(e) => e.into(),
-                };
-                g::gtk_list_box_append(self.0.list, label(&text));
+                match tools::calculate(expr) {
+                    Ok(v) => g::gtk_list_box_append(
+                        self.0.list,
+                        label(&format!("{}   ·   Enter to copy", tools::format_number(v))),
+                    ),
+                    Err(e) => note(self.0.list, e),
+                }
             } else if let Some(uri) = tools::web(q) {
                 g::gtk_list_box_append(self.0.list, label(&format!("Open {uri}")));
             } else {
@@ -441,13 +474,13 @@ impl Launcher {
                     g::gtk_list_box_append(self.0.list, row);
                 }
                 if results.is_empty() {
-                    g::gtk_list_box_append(
+                    note(
                         self.0.list,
-                        label(if self.0.indexing.get() {
+                        if self.0.indexing.get() {
                             "Loading installed applications…"
                         } else {
                             "No matching applications"
-                        }),
+                        },
                     );
                 }
             }
@@ -523,6 +556,7 @@ impl Launcher {
                 state.favorites.insert(id);
             }
             drop(state);
+            self.invalidate();
             self.persist();
             self.render();
         }
@@ -535,12 +569,69 @@ impl Launcher {
             // through Luma again.
             state.ignored.insert(id.clone());
             drop(state);
+            self.invalidate();
             self.persist();
             self.render();
         }
     }
+    /// Read desktop usage off the UI thread (KDE spawns `sqlite3`).
+    #[allow(deprecated)]
     fn harvest(&self) {
-        *self.0.system.borrow_mut() = system::harvest();
+        let (sender, receiver) = glib::MainContext::channel(glib::Priority::DEFAULT);
+        std::thread::spawn(move || {
+            let _ = sender.send(system::harvest());
+        });
+        let t = self.clone();
+        receiver.attach(None, move |usage| {
+            *t.0.system.borrow_mut() = usage;
+            t.invalidate();
+            // Ranking only matters on screen, and re-rendering mid-typing
+            // would reset the selection.
+            if t.0.visible.get() && t.query().is_empty() {
+                t.render();
+            }
+            glib::ControlFlow::Break
+        });
+    }
+    /// Directory monitors fire per write (SQLite WAL is continuous), so
+    /// coalesce a burst into one harvest.
+    fn schedule_harvest(&self) {
+        if self.0.harvest_pending.replace(true) {
+            return;
+        }
+        let t = self.clone();
+        let _ = glib::timeout_add_local_once(std::time::Duration::from_secs(2), move || {
+            t.0.harvest_pending.set(false);
+            t.harvest();
+        });
+    }
+    /// Launch tally merged with desktop usage, cached until an input changes.
+    fn state_view(&self) -> Rc<State> {
+        if let Some(view) = self.0.usage_view.borrow().as_ref() {
+            return view.clone();
+        }
+        let mut state = self.0.state.borrow().clone();
+        if self.0.config.borrow().system_usage {
+            state.usage = system::merge(&state.usage, &self.0.system.borrow(), &state.ignored);
+        }
+        let view = Rc::new(state);
+        *self.0.usage_view.borrow_mut() = Some(view.clone());
+        view
+    }
+    fn invalidate(&self) {
+        *self.0.usage_view.borrow_mut() = None;
+    }
+    fn quick_launch(&self, index: usize) {
+        if index < self.0.results.borrow().len() {
+            self.0.selected.set(index as i32);
+            unsafe {
+                g::gtk_list_box_select_row(
+                    self.0.list,
+                    g::gtk_list_box_get_row_at_index(self.0.list, index as i32),
+                );
+            }
+            self.launch();
+        }
     }
     fn launch_context(&self) -> gio::AppLaunchContext {
         unsafe {
@@ -568,19 +659,42 @@ impl Launcher {
             if actions.is_empty() {
                 g::gtk_box_append(layout, label("This application has no desktop actions"));
             }
+            let mut first: Widget = std::ptr::null_mut();
             for action in actions {
                 let b = button(&app.action_name(&action));
+                if first.is_null() {
+                    first = b;
+                }
                 g::gtk_box_append(layout, b);
                 let a = app.clone();
                 let t = self.clone();
                 signal(b, "clicked", move |_| {
-                    a.launch_action(&action, Some(&t.launch_context()));
+                    if let Err(e) = luma_launcher::launch::action(
+                        &a,
+                        &action,
+                        &t.launch_context(),
+                        &state::directory("state").join("applications.log"),
+                    ) {
+                        t.message(&e);
+                    }
                     g::gtk_window_destroy(w);
                     t.hide();
                     None
                 });
             }
+            let keys = key_controller();
+            g::gtk_widget_add_controller(w, keys);
+            signal(keys, "key-pressed", move |v| {
+                let escape = v[1].get::<u32>().unwrap_or(0) == 65307;
+                if escape {
+                    g::gtk_window_destroy(w);
+                }
+                Some(escape.to_value())
+            });
             g::gtk_window_present(w);
+            if !first.is_null() {
+                g::gtk_widget_grab_focus(first);
+            }
         }
     }
     fn launch(&self) {
@@ -591,7 +705,7 @@ impl Launcher {
                 unsafe {
                     g::gdk_clipboard_set_text(
                         g::gtk_widget_get_clipboard(self.0.window),
-                        c(&value.to_string()).as_ptr(),
+                        c(&tools::format_number(value)).as_ptr(),
                     )
                 }
                 self.hide();
@@ -638,7 +752,11 @@ impl Launcher {
                             }
                         }
                         drop(s);
-                        self.persist();
+                        self.invalidate();
+                        // fsync must not delay dismissing the window; idle
+                        // priority runs after the hide has been redrawn.
+                        let t = self.clone();
+                        glib::idle_add_local_once(move || t.persist());
                     }
                     self.hide();
                 }
@@ -841,6 +959,7 @@ impl Launcher {
                 g::gtk_box_append(layout, button);
                 let t = self.clone();
                 let restoring = Cell::new(false);
+                let armed = Cell::new(false);
                 signal(
                     button,
                     if active.is_some() {
@@ -852,6 +971,16 @@ impl Launcher {
                         if restoring.get() {
                             return None;
                         }
+                        let destructive = matches!(key, "erase" | "reset");
+                        if destructive && !armed.replace(true) {
+                            gtk_button_set_label(
+                                button,
+                                c(&format!("Click again to confirm: {title}")).as_ptr(),
+                            );
+                            t.message("Click again to confirm; this cannot be undone.");
+                            return None;
+                        }
+                        armed.set(false);
                         let previous = t.0.config.borrow().clone();
                         let mut cfg = t.0.config.borrow_mut();
                         match key {
@@ -907,23 +1036,35 @@ impl Launcher {
                                 c(&setting_text(title, key, &cfg)).as_ptr(),
                             );
                         }
-                        let saved = if t.0.config_writable {
+                        let touches_config =
+                            !matches!(key, "erase" | "reset" | "shortcut" | "autostart");
+                        let saved = if !touches_config {
+                            Ok(())
+                        } else if t.0.config_writable {
                             state::save(&state::directory("config").join("config.toml"), &*cfg)
                         } else {
                             Err("Corrupt configuration preserved; repair it before saving.".into())
                         };
                         drop(cfg);
                         if let Err(e) = saved {
+                            *t.0.config.borrow_mut() = previous;
                             if active.is_some() {
-                                *t.0.config.borrow_mut() = previous;
                                 restoring.set(true);
                                 let checked = object(button).property::<bool>("active");
                                 g::gtk_check_button_set_active(button, i32::from(!checked));
                                 restoring.set(false);
+                            } else {
+                                gtk_button_set_label(
+                                    button,
+                                    c(&setting_text(title, key, &t.0.config.borrow())).as_ptr(),
+                                );
                             }
                             t.message(&e)
                         }
-                        t.persist();
+                        if destructive {
+                            t.persist();
+                        }
+                        t.invalidate();
                         t.theme();
                         t.render();
                         None
@@ -960,7 +1101,7 @@ pub fn diagnostics() {
     let usage_source = system::backend()
         .map(|(b, p)| format!("{} ({})", b.label(), p.display()))
         .unwrap_or_else(|| "unavailable".into());
-    println!("Luma {}\nDesktop: {}\nSession: {}\nGTK: {}.{}\nRust: {}\nConfiguration: {}\nShortcut backend: portal registration on explicit setup; desktop-managed fallback\nSession bus: {}\nUsage source: {}\nInstalled applications: {}",env!("CARGO_PKG_VERSION"),std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default(),std::env::var("XDG_SESSION_TYPE").unwrap_or_default(),unsafe{g::gtk_get_major_version()},unsafe{g::gtk_get_minor_version()},env!("LUMA_RUSTC"),state::directory("config").display(),if gio::bus_get_sync(gio::BusType::Session,None::<&gio::Cancellable>).is_ok(){"accessible"}else{"unavailable"},usage_source,discover().len());
+    println!("Luma {}\nDesktop: {}\nSession: {}\nGTK: {}.{}\nRust: {}\nConfiguration: {}\nShortcut backend: portal registration on explicit setup; desktop-managed fallback\nSession bus: {}\nUsage source: {}\nSQLite CLI (KDE usage): {}\nInstalled applications: {}",env!("CARGO_PKG_VERSION"),std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default(),std::env::var("XDG_SESSION_TYPE").unwrap_or_default(),unsafe{g::gtk_get_major_version()},unsafe{g::gtk_get_minor_version()},env!("LUMA_RUSTC"),state::directory("config").display(),if gio::bus_get_sync(gio::BusType::Session,None::<&gio::Cancellable>).is_ok(){"accessible"}else{"unavailable"},usage_source,if system::sqlite3_available(){"found"}else{"missing (KDE usage import disabled)"},discover().len());
 }
 
 fn system_settings() -> Option<gio::Settings> {
@@ -975,17 +1116,21 @@ fn system_settings() -> Option<gio::Settings> {
         None,
     ))
 }
-fn autostart() -> Result<(), String> {
+fn autostart_path() -> Result<std::path::PathBuf, String> {
     let root = state::directory("config");
-    let dir = root
+    Ok(root
         .parent()
         .ok_or("No config directory")?
-        .join("autostart");
-    let path = dir.join("io.github.luma_launcher.LumaLauncher.desktop");
+        .join("autostart")
+        .join("io.github.luma_launcher.LumaLauncher.desktop"))
+}
+fn autostart() -> Result<(), String> {
+    let path = autostart_path()?;
     if path.exists() {
         std::fs::remove_file(path).map_err(|e| e.to_string())
     } else {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(path.parent().ok_or("No autostart directory")?)
+            .map_err(|e| e.to_string())?;
         let executable = std::env::current_exe().map_err(|e| e.to_string())?;
         state::atomic_write(&path, state::autostart_entry(&executable)?.as_bytes())
     }
@@ -994,6 +1139,10 @@ fn autostart() -> Result<(), String> {
 fn setting_text(title: &str, key: &str, cfg: &Config) -> String {
     let state = match key {
         "theme" => return format!("Theme: {} (click to cycle)", cfg.theme),
+        "autostart" => {
+            let on = autostart_path().is_ok_and(|p| p.exists());
+            return format!("Start at login: {}", if on { "on" } else { "off" });
+        }
         "compact" => cfg.compact,
         "history" => cfg.history,
         "system_usage" => cfg.system_usage,
@@ -1104,6 +1253,14 @@ mod keyboard_tests {
             assert!(!settings_shortcut(key, false), "plain key {key:#x}");
         }
         assert!(!settings_shortcut(u32::from(b'a'), true));
+    }
+
+    #[test]
+    fn letter_shortcuts_ignore_caps_lock() {
+        assert_eq!(lower_key(u32::from(b'D')), u32::from(b'd'));
+        assert_eq!(lower_key(u32::from(b'd')), u32::from(b'd'));
+        assert_eq!(lower_key(65307), 65307);
+        assert_eq!(lower_key(u32::from(b'1')), u32::from(b'1'));
     }
 
     #[test]
