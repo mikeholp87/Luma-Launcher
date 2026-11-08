@@ -4,38 +4,43 @@
 
 **A keyboard-driven application launcher for Linux and Windows.**
 
-The Linux application is built with Rust and GTK4. A separate Windows preview
-uses Windows PowerShell 5.1 and WPF, with a similar dark search palette and
+The Linux application is built with Rust and GTK4. The Windows application
+uses .NET and WPF, with a similar search palette and
 keyboard-driven workflow. The two implementations have different features;
 the details below describe Linux unless explicitly marked Windows.
 
-## Windows preview
+## Windows application
 
-On a Windows desktop, keep the files in `windows/` together and double-click
-`windows/LumaLauncher.cmd`. Alternatively, from the repository root run:
+Build the native Windows app with the .NET 10 SDK, then run the executable:
 
 ```powershell
-powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\windows\LumaLauncher.ps1
+dotnet publish .\windows\native\LumaLauncher.csproj -c Release -o .\dist\LumaLauncher
+.\dist\LumaLauncher\LumaLauncher.exe
 ```
 
-Windows PowerShell 5.1 and WPF are required; no Rust, GTK, administrator access,
-or build step is needed. Ctrl+Alt+Space toggles the palette when available;
-running the launcher again also toggles it. Search Start Menu shortcuts, use
+Keep the published files together; the app requires the .NET 10 Windows Desktop
+Runtime. No Rust, GTK, or administrator access is required. Ctrl+Alt+Space
+toggles the palette when available;
+running the launcher again shows it (`--toggle` toggles it). Search Start Menu shortcuts, use
 arrow keys and Enter to open a result, and press Escape to hide the palette.
 F5 refreshes the index. The quit button or Alt+F4 exits the resident process.
 
-Windows supports exact, prefix, substring, and fuzzy search; favorites and
-launch-frequency ranking; local history; a calculator; web searches; and basic
-settings. Ctrl+D pins or unpins, Ctrl+Delete forgets an app's history, Ctrl+J/K
-navigate, and Ctrl+, opens Settings. Try `= 25 * 4`, `g search terms`, or
+Windows supports Unicode search with exact, prefix, word-start, substring,
+acronym, fuzzy, keyword and description matching; favorites and frequency/recency
+ranking; automatic indexing; local history; a calculator; bare-domain URLs; and
+settings for global shortcuts, theme, accent, sizing, search, and startup.
+Ctrl+D pins or unpins, Ctrl+Delete forgets an app's history, Ctrl+J/K
+navigate, and Ctrl+, opens Settings. Ctrl+N/P also navigate, Ctrl+1–9 launches
+visible apps, and Ctrl+Enter opens Windows shell actions. Settings save automatically.
+Ctrl+Alt+S opens Settings globally by
+default; both global shortcuts can be changed in Settings. Try `= 25 * 4`, `g search terms`, or
 `ddg search terms`. History and settings are stored locally in
-`%LOCALAPPDATA%\LumaLauncher\history.json`.
+`%LOCALAPPDATA%\LumaLauncher\native-settings.json`.
 
-The preview indexes `.lnk` shortcuts in the user and common Start Menu Programs
+The app indexes `.lnk` shortcuts in the user and common Start Menu Programs
 folders. Some Microsoft Store apps and other apps without shortcuts there will
-not appear. App icons, system usage ranking, automatic login startup, desktop
-actions, and Linux's theme and layout controls have not been ported. The WPF
-layout and core logic have been checked, but interactive Windows UI and global
+not appear. KDE/GNOME system usage ranking and Linux desktop actions stay
+platform-specific. The core logic has been checked, but interactive Windows UI and global
 shortcut behavior still need verification. See the [Windows guide](windows/README.md)
 for commands, privacy, troubleshooting, and tests.
 
