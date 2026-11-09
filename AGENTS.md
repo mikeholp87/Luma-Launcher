@@ -8,7 +8,7 @@ Keep platform-specific implementations and their documentation together.
 
 ## Build, Test, and Development Commands
 
-Linux builds require Rust, pkg-config, GLib/GIO and GTK4 development libraries. Rust 1.92+ is required. Use `cargo build --locked`, `cargo test --locked`, and `cargo build --locked --release`; the single GTK widget test needs a display and skips itself without one (run `xvfb-run -a cargo test --locked` for it). See README.md for prerequisites and further checks. The Windows preview requires Windows PowerShell 5.1 and WPF; run it with `powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\windows\LumaLauncher.ps1`. It has no build step.
+Linux builds require Rust, pkg-config, GLib/GIO and GTK4 development libraries. Rust 1.92+ is required. Use `cargo build --locked`, `cargo test --locked`, and `cargo build --locked --release`; the single GTK widget test needs a display and skips itself without one (run `xvfb-run -a cargo test --locked` for it). See README.md for prerequisites and further checks. The Windows WPF application requires the .NET 10 SDK; build with `dotnet build windows/native/LumaLauncher.csproj -c Release` or publish with `dotnet publish windows/native/LumaLauncher.csproj -c Release -o dist/LumaLauncher`. Run `dist/LumaLauncher/LumaLauncher.exe` with the .NET 10 Windows Desktop Runtime installed.
 
 For repository exploration, use `rg --files --hidden` to list files and `rg "pattern" <path>` to search content. Prefix shell commands with `rtk`; use `rtk proxy <command>` for commands that need unfiltered output.
 
@@ -20,7 +20,7 @@ Lint any shell scripts you add or edit with `shellcheck <file>` and check format
 
 ## Testing Guidelines
 
-Rust unit tests are colocated with source and integration tests live in `tests/`; run `cargo test --locked`. Run Windows core tests with `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\Test-Core.ps1`. Add focused tests for nontrivial behavior and regression tests for bug fixes.
+Rust unit tests are colocated with source and integration tests live in `tests/`; run `cargo test --locked`. Run the compiled Windows core checks with `dotnet windows/native/bin/Release/net10.0-windows/LumaLauncher.dll --self-test` after building. The older PowerShell preview tests are `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\Test-Core.ps1`. Add focused tests for nontrivial behavior and regression tests for bug fixes.
 
 ## Commit & Pull Request Guidelines
 

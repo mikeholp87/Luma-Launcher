@@ -1,77 +1,112 @@
-# Windows preview
+# Luma for Windows
 
-Luma's Windows preview uses Windows PowerShell 5.1 and WPF, included with
-supported desktop editions of Windows. It does not require Rust, GTK, or
-administrator access. Keep the files in this directory together and
-double-click `LumaLauncher.cmd`, or run:
+The compiled WPF app in `native/` requires the .NET 10 Windows Desktop Runtime.
+Build with the .NET 10 SDK:
 
 ```powershell
-powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\windows\LumaLauncher.ps1
+dotnet publish .\windows\native\LumaLauncher.csproj -c Release -o .\dist\LumaLauncher
+.\dist\LumaLauncher\LumaLauncher.exe
 ```
 
-Type to search the Start Menu, use the arrow keys and Enter to launch a result,
-or double-click it. Escape hides the palette; Ctrl+Alt+Space toggles it when
-available. If the shortcut is unavailable, launching Luma again toggles the
-existing instance. F5 refreshes the index. Use the quit button in the search
-bar or Alt+F4 to exit. The script also accepts `-Background`, `-Toggle`, and
-`-Version`.
+Keep the entire published folder together, including the Unicode license.
+The per-user install is `%LOCALAPPDATA%\Programs\LumaLauncher`, with a Start Menu
+shortcut. Publishing itself does not install. The older PowerShell preview is
+separate and does not share settings.
 
-| Command | Behavior |
+## Search and controls
+
+Start Menu shortcuts are indexed in the background with their descriptions,
+category folders and target executable names. Start Menu changes automatically
+refresh the index. Search uses Unicode full case folding and compatibility
+normalization. Matching tiers are exact name, prefix, word start, substring,
+acronym, fuzzy subsequence, keywords, then optional descriptions. Tighter fuzzy
+matches win; favorites, logarithmic frequency buckets and recency break ties.
+History records only Luma launches and retains at most 1,000 applications.
+
+| Key | Action |
 |---|---|
-| `LumaLauncher.cmd` | Show the launcher, or toggle the running instance |
-| `LumaLauncher.cmd -Background` | Start hidden with the global shortcut registered |
-| `LumaLauncher.cmd -Toggle` | Toggle the existing instance, or start and show it |
-| `powershell.exe -NoProfile -File .\windows\LumaLauncher.ps1 -Version` | Print the version to the terminal |
+| Ctrl+Alt+Space (configurable) | Toggle palette globally |
+| Ctrl+Alt+S (configurable) | Open Settings globally |
+| Enter | Open selection or URL; copy calculation |
+| Up/Down, Ctrl+K/J, Ctrl+P/N | Previous/next result |
+| Ctrl+1 through Ctrl+9 | Open the corresponding visible application |
+| Escape | Clear search; press again to hide |
+| Ctrl+D / Ctrl+Delete | Pin/unpin / forget application history |
+| Ctrl+Enter | Windows shell actions and shortcut location |
+| Ctrl+comma / Ctrl+plus | Open Settings, including numpad plus |
+| F5 | Refresh applications |
+| Alt+F4 or quit button | Exit resident process |
 
-The CMD wrapper starts PowerShell asynchronously, so use the direct PowerShell
-command when you need terminal output. Include `-ExecutionPolicy Bypass` in that
-command if the local execution policy prevents running scripts.
+The palette hides after launching and on focus loss. Settings and action dialogs
+remain usable. Palette height follows results up to a scrolling cap. Font size
+scales search, result names, descriptions, footer and icons.
+The palette opens centered in the usable area of the monitor containing the
+pointer and stays centered as results or appearance settings change its size.
 
-The dark palette follows the Linux interface, including the search bar,
-highlighted results, and keyboard hints. Exact and prefix matches rank ahead of
-substring and fuzzy matches. Favorites and launch frequency improve ordering
-within a match tier. Ctrl+D pins or unpins an app, Ctrl+Delete forgets its
-launch history, Ctrl+J/K navigate, and Ctrl+, opens Settings. Settings can
-disable history or fuzzy matching and clear history.
+Use `= (250 + 75) * 2` for arithmetic, `g terms` or `ddg terms` for web search,
+an explicit HTTP/HTTPS URL, or a bare domain such as `github.com/rust-lang`.
+Bare domains accept `.com .org .net .io .dev .app .ai .edu .gov`; filenames and
+ordinary app IDs remain searches. URL credentials and executable schemes are
+rejected. Arithmetic supports unary signs and bounded nesting, without code
+evaluation; results such as `0.1+0.2` display cleanly as `0.3`.
 
-Enter `= (250 + 75) * 2` for a calculation; Enter copies the result. Prefix a
-query with `g ` or `ddg ` to search the web, or enter an HTTP/HTTPS URL to open
-it. URLs open through the Windows default browser. History, favorites, and
-settings are stored locally in `%LOCALAPPDATA%\LumaLauncher\history.json`.
-If that file is damaged, Luma preserves it and stops writing to it.
-Disabling history stops recording new launches; use Settings to clear existing
-history. Favorites are stored separately in the same file and are not cleared by
-that button. Luma does not collect telemetry or track applications launched
-outside the launcher.
+## Settings and privacy
 
-The preview searches `.lnk` files in the user's and common Start Menu Programs
-folders. Apps without shortcuts there, including some Microsoft Store apps,
-may be missing. Windows-specific integration does not yet include system usage
-statistics, automatic login startup, app icons, Linux desktop actions, theme or
-layout customization, or Linux portal shortcuts. Windows may restrict focus
-when the palette is activated by another process.
+Text fields save on Enter or focus loss. Checkboxes and themes save immediately.
+Closing Settings saves pending fields; Save settings retries edits and closes
+after success. Invalid input or save failures retain edits and show an error.
+Failed checkbox/theme writes restore the saved selection. Previously saved
+changes remain saved when Settings closes. History clearing and personalization
+reset require a second click and apply only after a successful save.
+Escape or Discard pending edits closes without retrying unsaved fields; changes
+already saved remain in effect.
 
-## Troubleshooting and removal
+Preferences cover both global shortcuts, theme, accent, width, result limit,
+font size, compact layout, the Settings button, history, descriptions, fuzzy
+matching, clearing search on opening and login startup. System theme follows
+Windows appearance notifications while running. Conflicting shortcuts restore
+previous registrations when possible.
 
-- If Ctrl+Alt+Space is unavailable, another app may have registered it. Start
-  the launcher again to toggle its window, or release the conflicting shortcut.
-- If an app is missing, confirm it has a `.lnk` shortcut in one of the Start
-  Menu Programs folders, then press F5.
-- If history cannot be loaded, repair or move the named `history.json` file
-  after exiting Luma. The launcher will not overwrite a damaged file.
-- If Windows blocks the scripts, check your execution policy and organization
-  policy. The included CMD file requests a process-only bypass.
+Preferences and personalization live in
+`%LOCALAPPDATA%\LumaLauncher\native-settings.json`. Writes replace the file
+atomically. Corrupt or oversized files are preserved and saving is disabled until
+repaired. No telemetry or tracking outside Luma. Disabling history stops new
+records; clear existing records separately. Login startup manages only Luma's
+current-user Windows Run value; re-enable it after moving the executable.
 
-To remove the preview, quit it and remove the `windows/` directory. To also
-remove preferences, favorites, and history, delete the `LumaLauncher` directory
-under `%LOCALAPPDATA%` separately.
+## Resident commands
 
-Run the core tests with:
+Pass one flag at a time. No flag or `--show` shows the palette. The following
+commands reach the existing instance through a current-user/session named pipe:
+
+- `--hide`, `--toggle`, `--settings`, `--refresh`, `--quit`.
+- `--background` starts hidden and leaves an existing instance alone.
+- `--version`, `--diagnostics`, `--help` print information without a running app.
+- `--self-test` runs core and settings regression checks.
+
+Use `dotnet .\dist\LumaLauncher\LumaLauncher.dll --diagnostics` for console output;
+the executable is a GUI application. Starting the executable again shows the
+existing palette; use the global shortcut or `--toggle` to toggle it.
+
+## Platform differences and validation
+
+See [the pinned Linux feature comparison](linux-feature-parity.md). Windows
+indexes `.lnk` shortcuts; apps without them, including some Store apps, may not
+appear. Descriptions may be empty. Icons use the Windows shell with a generic
+fallback. Desktop actions map to Windows shell verbs. KDE/GNOME usage databases,
+XDG portals, D-Bus and Linux packaging stay Linux-specific. Windows controls
+foreground activation and reserves some global shortcuts.
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\Test-Core.ps1
+dotnet build .\windows\native\LumaLauncher.csproj -c Release
+dotnet .\windows\native\bin\Release\net10.0-windows\LumaLauncher.dll --self-test
 ```
 
-`-ExecutionPolicy Bypass` applies only to the launched PowerShell process; it
-does not change the machine's execution policy. Group Policy may prevent script
-execution.
+Checks cover ranking tiers, Unicode, URL/calculator safety, keyboard mappings,
+CLI parsing, shortcut rollback, persistence, failed writes, autosave, pending
+edits on close and destructive-button confirmation. Real desktop focus, theme
+notifications and actual shortcut conflicts need live Windows verification.
+
+To remove Luma, disable login startup, quit, and remove the install folder and
+Start Menu shortcut. Delete the data folder separately only to remove preferences
+and history. Unicode data in `native/Unicode/` uses the included Unicode license.

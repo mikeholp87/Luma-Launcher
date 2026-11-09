@@ -4,3 +4,7 @@
 core
 core.*
 !windows/Core.ps1
+!windows/native/Core.cs
+/.dotnet-local/
+/windows/native/bin/
+/windows/native/obj/
