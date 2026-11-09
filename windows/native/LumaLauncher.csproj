@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>LumaLauncher</AssemblyName>
+    <ApplicationIcon>Assets\LumaLauncher.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Unicode/CaseFolding.txt" />

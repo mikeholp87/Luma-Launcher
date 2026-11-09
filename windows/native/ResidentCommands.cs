@@ -45,6 +45,11 @@ internal static class ResidentCommands
             }
             catch (OperationCanceledException) { if (stop.IsCancellationRequested) break; }
             catch (IOException) { }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // An unexpected error must not end the listener, or --toggle/--show would silently stop working.
+                try { await Task.Delay(250, stop); } catch (OperationCanceledException) { break; }
+            }
         }
     }
 }

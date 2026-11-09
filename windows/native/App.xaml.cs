@@ -7,6 +7,7 @@ namespace Luma;
 public partial class App : Application
 {
     private Mutex? mutex;
+    private bool ownsMutex;
     private readonly CancellationTokenSource residentStop = new();
 
     protected override void OnStartup(StartupEventArgs e)
@@ -34,7 +35,8 @@ public partial class App : Application
             Shutdown(ResidentCommands.Send(command) ? 0 : 1);
             return;
         }
-        if (command == "--quit") { mutex.ReleaseMutex(); mutex.Dispose(); mutex = null; Shutdown(); return; }
+        ownsMutex = true;
+        if (command == "--quit") { mutex.ReleaseMutex(); mutex.Dispose(); mutex = null; ownsMutex = false; Shutdown(); return; }
         var window = new MainWindow();
         MainWindow = window;
         window.InitializeResident();
@@ -45,8 +47,8 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         residentStop.Cancel();
-        // Only the owner may release the mutex.
-        if (MainWindow is not null) mutex?.ReleaseMutex();
+        // Only the owner may release the mutex. Application.MainWindow is cleared when the window closes, so track ownership explicitly.
+        if (ownsMutex) mutex?.ReleaseMutex();
         mutex?.Dispose();
         base.OnExit(e);
     }

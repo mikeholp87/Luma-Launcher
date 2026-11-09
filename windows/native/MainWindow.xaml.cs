@@ -76,7 +76,10 @@ public partial class MainWindow : Window
         ApplyAppearance(); Render();
         if (settings.ClearOnShow) Query.Text = "";
         WindowState = WindowState.Normal;
-        Show(); UpdateLayout(); position.Center(); Activate(); Query.Focus(); Query.SelectAll();
+        Show(); UpdateLayout(); position.Center();
+        Topmost = true; // Keep above other windows while taking focus; avoids a taskbar-only flash.
+        Native.ForceForeground(hwnd); Activate();
+        Keyboard.Focus(Query); Query.Focus(); Query.SelectAll();
     }
     private async void RefreshIndex()
     {
@@ -166,7 +169,9 @@ public partial class MainWindow : Window
             icon = ExtractIcon(result.Value);
             icons[result.Value] = icon;
         }
-        result.Icon = await icon;
+        var loaded = await icon;
+        if (loaded is null) { icons.Remove(result.Value); return; } // Never cache a miss; the next render retries.
+        result.Icon = loaded;
     }
     private async Task<ImageSource?> ExtractIcon(string path)
     {
@@ -278,7 +283,9 @@ public partial class MainWindow : Window
     private void ResultDoubleClick(object sender, MouseButtonEventArgs e) => OpenSelected();
     private void ResultClicked(object sender, MouseButtonEventArgs e)
     {
-        if (e.ChangedButton == MouseButton.Left && Results.SelectedItem is Result) OpenSelected();
+        // Only launch when a row was clicked; scrollbar and empty-area clicks must not open the selected item.
+        if (e.ChangedButton != MouseButton.Left || e.OriginalSource is not DependencyObject source) return;
+        if (ItemsControl.ContainerFromElement(Results, source) is ListBoxItem { DataContext: Result row }) { Results.SelectedItem = row; OpenSelected(); }
     }
     protected override void OnClosed(EventArgs e)
     {
@@ -333,6 +340,7 @@ public partial class MainWindow : Window
         if (enabled)
         {
             string exe = Environment.ProcessPath ?? throw new IOException("Cannot determine the application path.");
+            if (!exe.EndsWith("LumaLauncher.exe", StringComparison.OrdinalIgnoreCase)) throw new IOException("Start at sign-in needs the published LumaLauncher.exe, not the dotnet host.");
             key.SetValue("LumaLauncher", $"\"{exe}\" --background");
         }
         else key.DeleteValue("LumaLauncher", false);
