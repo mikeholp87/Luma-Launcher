@@ -58,9 +58,87 @@ and an X11-compatible GTK interface. Luma uses GIO application discovery and
 launching instead of interpreting desktop-entry commands itself.
 
 > **Project status: initial release, 0.1.0.** Release builds, automated tests,
-> local installer checks, and Debian package extraction pass. Interactive
-> KDE/GNOME behavior, compositor focus, real global shortcuts, and Debian Stable
-> installation still need verification. See the [verification report](docs/verification.md).
+> local installer checks, and the apt package pass; the package installs and runs on
+> Debian testing with KDE Plasma (Wayland). GNOME behavior, compositor focus on other
+> desktops, real global shortcuts, and Debian 13 installation still need verification.
+> See the [verification report](docs/verification.md).
+
+## Install (Debian, Ubuntu and derivatives)
+
+The quickest way is Luma's signed apt repository. Updates then arrive with your normal
+`sudo apt update && sudo apt upgrade`.
+
+**Supported:** Debian 13 (trixie) or newer and Ubuntu 24.04 or newer, on amd64, and
+distributions based on them (for example Linux Mint 22). Older releases such as Ubuntu
+22.04, Debian 12 and Linux Mint 21 are too old for the packaged libraries; build
+from source there. CI installs the package on Ubuntu 24.04, and it has also been
+installed and run on Debian testing (KDE Plasma, Wayland). Debian 13 and GNOME
+installs have not yet been tested by the maintainer.
+
+Run these in a normal terminal (`sudo` asks for your password, so they will not work
+from a tool that has no terminal):
+
+```bash
+# 1. Trust the repository's signing key
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://mikeholp87.github.io/Luma-Launcher/apt/luma-launcher.asc | sudo tee /etc/apt/keyrings/luma-launcher.asc >/dev/null
+
+# 2. Add the repository
+echo "deb [signed-by=/etc/apt/keyrings/luma-launcher.asc] https://mikeholp87.github.io/Luma-Launcher/apt/ ./" | sudo tee /etc/apt/sources.list.d/luma-launcher.list
+
+# 3. Install
+sudo apt update && sudo apt install luma-launcher
+```
+
+Step 2 is easy to skip, and without it `apt` reports `Unable to locate package
+luma-launcher`: a plain `sudo apt update` only helps once the repository is added.
+
+**Check the key (optional).** The signing key's fingerprint is
+`82A6 ED17 14A6 C92E FEFA  712A 1836 6AD3 BA2B FAAC`. Compare it with:
+
+```bash
+gpg --show-keys --with-fingerprint /etc/apt/keyrings/luma-launcher.asc
+```
+
+### After installing
+
+Installing does not open anything by itself: Luma is a launcher that waits for you
+to call it.
+
+1. **Start it:** run `luma-launcher` or choose **Luma Launcher** in your application menu.
+   It stays resident so later activations are instant.
+2. **Bind a shortcut** (for example Alt+Space) to the command `luma-launcher --toggle`;
+   see [Assign a global shortcut](#assign-a-global-shortcut).
+3. **Optional:** turn on **Start at login** in Settings (Ctrl+, opens Settings).
+
+### Update, check and remove
+
+```bash
+sudo apt update && sudo apt install --only-upgrade luma-launcher   # update
+apt-cache policy luma-launcher                                     # installed vs available version
+sudo apt remove luma-launcher                                      # remove (keeps your settings)
+sudo rm /etc/apt/sources.list.d/luma-launcher.list /etc/apt/keyrings/luma-launcher.asc && sudo apt update   # forget the repository
+```
+
+Your preferences live in `~/.config/luma-launcher` and `~/.local/state/luma-launcher`,
+and `apt remove` leaves them alone.
+
+### Already installed from source or with `install.sh`?
+
+Remove that copy first. `~/.local/bin` comes before `/usr/bin` on most systems, so the
+old copy would keep running and hide the packaged one:
+
+```bash
+luma-launcher --quit
+bash scripts/uninstall.sh          # keeps your settings
+sudo apt install luma-launcher     # after adding the repository above
+hash -r; type -a luma-launcher     # should list only /usr/bin/luma-launcher
+```
+
+A desktop shortcut that points at the old path (KDE stores it in
+`~/.local/share/applications/`) must be changed to `luma-launcher --toggle` or
+`/usr/bin/luma-launcher --toggle`. KDE keeps shortcut commands in memory, so log out
+and back in afterwards.
 
 ## Features
 
@@ -93,7 +171,7 @@ launching instead of interpreting desktop-entry commands itself.
 
 | Component | Requirement |
 |---|---|
-| Operating system | Linux; Debian Stable and Testing are the intended package targets |
+| Operating system | Linux. The apt package needs Debian 13 / Ubuntu 24.04 or newer (amd64); build from source elsewhere |
 | Desktop | A graphical GTK4-compatible session with session D-Bus |
 | Toolchain | Rust 1.92 or newer (the gtk-rs 0.11 MSRV) and Cargo |
 | Native libraries | GTK4 runtime, GLib/GIO, a C linker, and pkg-config |
@@ -164,16 +242,10 @@ The script requires `luma-launcher` in PATH during setup and stores its resolved
 absolute path. Disable it with `bash scripts/autostart.sh disable`. Only Luma's
 own XDG autostart entry is managed.
 
-### Install with apt (Debian 13 / Ubuntu 24.04 or newer, amd64)
+### Install with apt
 
-This adds the signed repository, so updates arrive through `apt upgrade`:
-
-```bash
-sudo install -d -m 0755 /etc/apt/keyrings
-curl -fsSL https://mikeholp87.github.io/Luma-Launcher/apt/luma-launcher.asc | sudo tee /etc/apt/keyrings/luma-launcher.asc >/dev/null
-echo "deb [signed-by=/etc/apt/keyrings/luma-launcher.asc] https://mikeholp87.github.io/Luma-Launcher/apt/ ./" | sudo tee /etc/apt/sources.list.d/luma-launcher.list
-sudo apt update && sudo apt install luma-launcher
-```
+See [Install (Debian, Ubuntu and derivatives)](#install-debian-ubuntu-and-derivatives)
+near the top of this page.
 
 ### Install a single release (no repository, no updates)
 
@@ -434,6 +506,19 @@ search/rendering refinements justified by measurements.
   Run `luma-launcher --refresh` after correcting the environment.
 - **Preferences do not save:** inspect the Settings status message and repair
   malformed TOML or unwritable paths before restarting.
+- **`E: Unable to locate package luma-launcher`:** the repository was not added; run
+  steps 1 and 2 of [Install](#install-debian-ubuntu-and-derivatives), then `sudo apt update`.
+- **`NO_PUBKEY`, "not signed" or "the key(s) … are ignored" during `apt update`:** the key
+  file is missing or empty. Check `wc -c /etc/apt/keyrings/luma-launcher.asc` (about 409
+  bytes) and repeat step 1.
+- **`unmet dependencies … libc6 (>= 2.39)`:** the distribution is too old for the packaged
+  build; see the supported releases above.
+- **Installed, but nothing appears:** Luma only opens when called. Run `luma-launcher`,
+  choose it in the application menu, or press your shortcut; bind one to
+  `luma-launcher --toggle` if you have not.
+- **The old version keeps running after an upgrade or reinstall:** a resident process owns
+  the app's D-Bus name and answers commands. Run `luma-launcher --quit`, then start it
+  again.
 
 Run `luma-launcher --diagnostics` when reporting a problem. More detail is in the
 [troubleshooting guide](docs/troubleshooting.md).
@@ -453,7 +538,14 @@ Preferences are preserved. To explicitly remove Luma's preferences and history:
 bash scripts/uninstall.sh --purge
 ```
 
-For a Debian package installation, remove the package through the package manager.
+For a Debian package installation:
+
+```bash
+luma-launcher --quit
+sudo apt remove luma-launcher
+sudo rm /etc/apt/sources.list.d/luma-launcher.list /etc/apt/keyrings/luma-launcher.asc   # optional: forget the repository
+```
+
 Remove user-created shortcut assignments manually; uninstalling does not alter
 unrelated desktop shortcuts or application settings.
 

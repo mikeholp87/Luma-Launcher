@@ -1,5 +1,10 @@
 # Installation and removal
 
+**Debian, Ubuntu and derivatives:** install from the signed apt repository; the steps,
+supported releases and troubleshooting are in the
+[README](../README.md#install-debian-ubuntu-and-derivatives). The notes below cover
+building and installing from source.
+
 Build with `cargo build --release`. For normal development install Debian's
 `build-essential pkg-config libglib2.0-dev libgtk-4-dev` packages. Root is never
 needed to run Luma or install it locally.
