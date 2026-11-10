@@ -24,8 +24,8 @@ Restart after external edits. Width is limited to 360–1200, font to 12–32, r
 to 1–20. Copy and repair corrupt files, then restart; Luma preserves the originals.
 
 `bash scripts/package.sh` builds an amd64 package on this host using
-dpkg-shlibdeps-generated dependencies. This package targets Testing/Unstable;
-do not assume it installs on Stable. Build with `packaging/Containerfile` in an
+dpkg-shlibdeps-generated dependencies. Its dependency versions come from
+the build machine, so build on the oldest distribution you support. Build with `packaging/Containerfile` in an
 accessible container environment for Debian 13 libraries, extract `/build/dist`,
 then test installation in a fresh Debian Stable VM. That container path is untested.
 

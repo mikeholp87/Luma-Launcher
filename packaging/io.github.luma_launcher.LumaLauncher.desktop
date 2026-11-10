@@ -6,6 +6,7 @@ Exec=luma-launcher --show
 Icon=io.github.luma_launcher.LumaLauncher
 Terminal=false
 Categories=Utility;
+Keywords=launcher;search;applications;run;
 StartupNotify=true
 Actions=Settings;
 
