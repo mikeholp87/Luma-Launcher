@@ -45,7 +45,7 @@ from the build machine, so supporting an older distribution means building on it
 
 After each successful tag release, `.github/workflows/apt-repo.yml` rebuilds a signed
 *flat* apt repository from **every** GitHub Release `.deb` and deploys it, together
-with the project site, to GitHub Pages at `https://mikeholp87.github.io/Luma-Launcher/apt/`.
+with the static project site in `site/`, to GitHub Pages at `https://mikeholp87.github.io/Luma-Launcher/apt/`.
 It also runs on pushes to `main` (so the site does not go stale) and on demand
 (**Run workflow**). Users then get `sudo apt install luma-launcher` and updates through
 `apt upgrade` (see the README).

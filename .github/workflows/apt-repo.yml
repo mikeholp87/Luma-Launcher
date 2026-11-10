@@ -1,6 +1,6 @@
 name: APT repository
 # Rebuilds the signed flat apt repository from every GitHub Release and
-# publishes it, next to the project site, to GitHub Pages at /apt/.
+# publishes it at /apt/, next to the project site from site/, to GitHub Pages.
 # Runs after each successful tag release, on pushes to main (so the site does
 # not go stale), and on demand. Pull requests that touch it do a dry run with a
 # throwaway key and never deploy. See docs/releasing.md.
@@ -16,6 +16,7 @@ on:
       - scripts/build-apt-repo.sh
       - scripts/test-apt-repo.sh
       - packaging/apt/**
+      - site/**
   workflow_dispatch:
 permissions:
   contents: read
@@ -65,7 +66,11 @@ jobs:
           echo "PUBKEY=$RUNNER_TEMP/dry-run.asc" >>"$GITHUB_ENV"
       - name: apt accepts the repository and rejects tampering
         run: bash scripts/test-apt-repo.sh apt "$PUBKEY"
-      - uses: actions/jekyll-build-pages@v1
+      - name: Assemble the site
+        run: |
+          cp -r site _site
+          cp assets/io.github.luma_launcher.LumaLauncher.svg _site/luma-launcher-icon.svg
+          mv apt _site/apt
       - uses: actions/upload-pages-artifact@v3
   deploy:
     needs: build
