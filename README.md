@@ -423,7 +423,8 @@ new records; clear existing records separately in Settings. When "system app
 usage" is on, applications already tallied by the desktop are ranked by that
 combined usage, most used first and most recently used as a tiebreaker. The
 source follows the session: GNOME Shell's `score` and `last-seen` in
-`~/.local/share/gnome-shell/application_state`, or KDE's activity statistics
+`~/.local/share/gnome-shell/application_state`, or the application launches
+in KDE's activity statistics (files and folders an app opened do not count)
 in `~/.local/share/kactivitymanagerd/resources/database` (read through
 `sqlite3 -readonly`; the `sqlite3` CLI must be installed, otherwise KDE usage is skipped). `luma-launcher --diagnostics` prints the source in use and whether `sqlite3` was found.
 Ctrl+Delete removes an application from that combined ranking until it is

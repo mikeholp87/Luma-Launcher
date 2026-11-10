@@ -77,8 +77,10 @@ pub fn backend() -> Option<(Backend, PathBuf)> {
                 .to_ascii_lowercase();
             if desktop.contains("gnome") {
                 (Backend::Gnome, gnome)
-            } else {
+            } else if desktop.contains("kde") {
                 (Backend::Kde, kde)
+            } else {
+                return None;
             }
         }
     };
@@ -127,24 +129,30 @@ fn tally(raw: &str) -> Option<u64> {
     }
 }
 
-// Read-only usage tallies from the desktop environment; see `Backend`.
+/// KDE records application launches against `applications:<desktop id>`
+/// resources. `initiatingAgent` is whoever opened a resource (Dolphin
+/// browsing folders, the task manager starting apps), not a launch tally.
+const KDE_QUERY: &str = "SELECT substr(targettedResource, 14), SUM(cachedScore), MAX(lastUpdate) \
+     FROM ResourceScoreCache WHERE targettedResource LIKE 'applications:%' \
+     GROUP BY targettedResource";
+
 /// Desktop usage tallies recorded by KDE's activity manager, keyed by
 /// desktop file ID. Read through the sqlite3 command-line tool; an absent
 /// tool or database yields no entries.
 pub fn kde_usage() -> BTreeMap<String, Usage> {
-    let Some(path) = kde_state_path() else {
-        return BTreeMap::new();
-    };
+    kde_state_path()
+        .map(|path| kde_usage_at(&path))
+        .unwrap_or_default()
+}
+
+fn kde_usage_at(path: &Path) -> BTreeMap<String, Usage> {
     if !path.exists() {
         return BTreeMap::new();
     }
     let Ok(output) = std::process::Command::new("sqlite3")
         .arg("-readonly")
-        .arg(&path)
-        .arg(
-            "SELECT initiatingAgent, SUM(cachedScore), MAX(lastUpdate) \
-             FROM ResourceScoreCache GROUP BY initiatingAgent",
-        )
+        .arg(path)
+        .arg(KDE_QUERY)
         .output()
     else {
         return BTreeMap::new();
@@ -163,8 +171,8 @@ pub fn sqlite3_available() -> bool {
         .is_ok_and(|o| o.status.success())
 }
 
-/// Map a recorded agent name to a launcher desktop file ID. Agents may name
-/// the application without a `.desktop` suffix; anything else (portal paths,
+/// Map a recorded application resource to a launcher desktop file ID. It may
+/// name the application without a `.desktop` suffix; anything else (paths,
 /// URI-like sources) is not an application.
 fn application_id(agent: &str) -> Option<String> {
     let id = agent.trim();
@@ -367,6 +375,50 @@ mod tests {
             })
         );
         assert_eq!(usage.len(), 2);
+    }
+
+    #[test]
+    fn kde_usage_counts_application_launches_not_resource_openers() {
+        if !sqlite3_available() {
+            eprintln!("skipped: sqlite3 not installed");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("luma-kde-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("database");
+        let created = std::process::Command::new("sqlite3")
+            .arg(&path)
+            .arg(
+                "CREATE TABLE ResourceScoreCache (initiatingAgent TEXT, \
+                 targettedResource TEXT, cachedScore REAL, lastUpdate INTEGER); \
+                 INSERT INTO ResourceScoreCache VALUES \
+                 ('org.kde.dolphin', '/home/user', 155.2, 1793000100), \
+                 ('org.kde.dolphin', '/home/user/Videos', 131.3, 1793000200), \
+                 ('org.kde.libtaskmanager', 'applications:org.kde.dolphin.desktop', 134.6, 1793000300), \
+                 ('org.kde.krunner', 'applications:org.kde.dolphin.desktop', 2.0, 1793000400), \
+                 ('org.kde.libtaskmanager', 'applications:com.obsproject.Studio.desktop', 57.3, 1793000500), \
+                 ('org.kde.kdenlive', '/home/user/project.kdenlive', 71.3, 1793000600);",
+            )
+            .status()
+            .unwrap();
+        assert!(created.success());
+        let usage = kde_usage_at(&path);
+        fs::remove_dir_all(dir).unwrap();
+        assert_eq!(
+            usage.get("org.kde.dolphin.desktop"),
+            Some(&Usage {
+                count: 136,
+                last: 1793000400
+            })
+        );
+        assert_eq!(
+            usage.get("com.obsproject.Studio.desktop"),
+            Some(&Usage {
+                count: 57,
+                last: 1793000500
+            })
+        );
+        assert_eq!(usage.len(), 2, "{usage:?}");
     }
 
     #[test]

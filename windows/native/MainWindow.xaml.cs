@@ -226,7 +226,7 @@ public partial class MainWindow : Window
     internal static bool IsSystemLight()
     {
         using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-        return (int)(key?.GetValue("AppsUseLightTheme", 0) ?? 0) != 0;
+        return key?.GetValue("AppsUseLightTheme") is int light && light != 0;
     }
     private void OnKeyDown(object sender, KeyEventArgs e)
     {

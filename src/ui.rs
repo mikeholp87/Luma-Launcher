@@ -152,7 +152,7 @@ struct Inner {
     state: RefCell<State>,
     system: RefCell<BTreeMap<String, Usage>>,
     system_monitor: RefCell<Option<gio::FileMonitor>>,
-    harvest_pending: Cell<bool>,
+    system_stale: Cell<bool>,
     usage_view: RefCell<Option<Rc<State>>>,
     provider: gtk::CssProvider,
     settings: RefCell<Option<gtk::ApplicationWindow>>,
@@ -180,18 +180,53 @@ struct Setting {
     title: &'static str,
     control: Control,
     restoring: Cell<bool>,
-    armed: Cell<bool>,
+    /// Pending lapse of a destructive action's first click.
+    disarm: Rc<RefCell<Option<glib::SourceId>>>,
 }
 enum Control {
     Check(glib::WeakRef<gtk::CheckButton>),
     Push(glib::WeakRef<gtk::Button>),
 }
+const CONFIRM_WINDOW: std::time::Duration =
+    std::time::Duration::from_millis(if cfg!(test) { 200 } else { 5000 });
 impl Setting {
+    fn new(key: &'static str, title: &'static str, control: Control) -> Self {
+        Self {
+            key,
+            title,
+            control,
+            restoring: Cell::new(false),
+            disarm: Rc::new(RefCell::new(None)),
+        }
+    }
     fn set_label(&self, text: &str) {
         if let Control::Push(button) = &self.control {
             if let Some(button) = button.upgrade() {
                 button.set_label(text);
             }
+        }
+    }
+    fn armed(&self) -> bool {
+        self.disarm.borrow().is_some()
+    }
+    /// First click of a destructive action. It lapses after `CONFIRM_WINDOW`
+    /// so a stray click much later cannot erase anything.
+    fn arm(&self) {
+        let Control::Push(button) = &self.control else {
+            return;
+        };
+        self.set_label(&format!("Click again to confirm: {}", self.title));
+        let (button, title, disarm) = (button.clone(), self.title, self.disarm.clone());
+        *self.disarm.borrow_mut() = Some(glib::timeout_add_local_once(CONFIRM_WINDOW, move || {
+            disarm.borrow_mut().take();
+            if let Some(button) = button.upgrade() {
+                button.set_label(title);
+            }
+        }));
+    }
+    fn disarm(&self) {
+        if let Some(pending) = self.disarm.borrow_mut().take() {
+            pending.remove();
         }
     }
 }
@@ -274,7 +309,7 @@ impl Launcher {
             state: RefCell::new(history.unwrap_or_default()),
             system: RefCell::new(BTreeMap::new()),
             system_monitor: RefCell::new(None),
-            harvest_pending: Cell::new(false),
+            system_stale: Cell::new(false),
             usage_view: RefCell::new(None),
             provider,
             settings: RefCell::new(None),
@@ -429,6 +464,9 @@ impl Launcher {
     fn show(&self) {
         if self.0.config.borrow().clear_on_show {
             self.0.input.set_text("");
+        }
+        if self.0.system_stale.replace(false) && self.0.system_monitor.borrow().is_some() {
+            self.harvest();
         }
         self.render();
         self.0.visible.set(true);
@@ -668,22 +706,12 @@ impl Launcher {
             monitor.connect_changed(clone!(
                 #[weak(rename_to = t)]
                 self,
-                move |_, _, _, _| t.schedule_harvest()
+                // Directory monitors fire per write (SQLite WAL is
+                // continuous); re-read at most once per showing instead.
+                move |_, _, _, _| t.0.system_stale.set(true)
             ));
             *self.0.system_monitor.borrow_mut() = Some(monitor);
         }
-    }
-    /// Directory monitors fire per write (SQLite WAL is continuous), so
-    /// coalesce a burst into one harvest.
-    fn schedule_harvest(&self) {
-        if self.0.harvest_pending.replace(true) {
-            return;
-        }
-        let t = self.clone();
-        let _ = glib::timeout_add_local_once(std::time::Duration::from_secs(2), move || {
-            t.0.harvest_pending.set(false);
-            t.harvest();
-        });
     }
     /// Launch tally merged with desktop usage, cached until an input changes.
     fn state_view(&self) -> Rc<State> {
@@ -1016,13 +1044,7 @@ impl Launcher {
                 let check = gtk::CheckButton::with_label(title.trim_start_matches("Toggle "));
                 check.set_active(active);
                 layout.append(&check);
-                let setting = Setting {
-                    key,
-                    title,
-                    control: Control::Check(check.downgrade()),
-                    restoring: Cell::new(false),
-                    armed: Cell::new(false),
-                };
+                let setting = Setting::new(key, title, Control::Check(check.downgrade()));
                 // Connected after set_active so building the row is not a toggle.
                 check.connect_toggled(clone!(
                     #[weak(rename_to = t)]
@@ -1033,13 +1055,7 @@ impl Launcher {
                 let button =
                     gtk::Button::with_label(&setting_text(title, key, &self.0.config.borrow()));
                 layout.append(&button);
-                let setting = Setting {
-                    key,
-                    title,
-                    control: Control::Push(button.downgrade()),
-                    restoring: Cell::new(false),
-                    armed: Cell::new(false),
-                };
+                let setting = Setting::new(key, title, Control::Push(button.downgrade()));
                 button.connect_clicked(clone!(
                     #[weak(rename_to = t)]
                     self,
@@ -1126,12 +1142,12 @@ impl Launcher {
         }
         let (key, title) = (s.key, s.title);
         let destructive = matches!(key, "erase" | "reset");
-        if destructive && !s.armed.replace(true) {
-            s.set_label(&format!("Click again to confirm: {title}"));
-            self.message("Click again to confirm; this cannot be undone.");
+        if destructive && !s.armed() {
+            s.arm();
+            self.message("Click again within 5 seconds to confirm; this cannot be undone.");
             return;
         }
-        s.armed.set(false);
+        s.disarm();
         let previous = self.0.config.borrow().clone();
         let mut cfg = self.0.config.borrow_mut();
         match key {
@@ -1169,10 +1185,19 @@ impl Launcher {
                 } else {
                     ("gnome-control-center", "keyboard")
                 };
-                if let Err(e) = std::process::Command::new(command.0).arg(command.1).spawn() {
-                    self.message(&e.to_string())
-                }
-                self.message("Create a shortcut for luma-launcher --toggle; resolve Alt+Space conflicts in desktop Settings.");
+                // GSubprocess reaps the child; a dropped std Child would linger
+                // as a zombie for the life of this resident process.
+                let spawned = gio::Subprocess::newv(
+                    &[command.0.as_ref(), command.1.as_ref()],
+                    gio::SubprocessFlags::STDOUT_SILENCE | gio::SubprocessFlags::STDERR_SILENCE,
+                );
+                self.message(&match spawned {
+                    Ok(_) => "Create a shortcut for luma-launcher --toggle; resolve Alt+Space conflicts in desktop Settings.".to_owned(),
+                    Err(e) => format!(
+                        "Could not open desktop shortcut settings ({}): {e}. Create a shortcut for luma-launcher --toggle manually.",
+                        command.0
+                    ),
+                });
             }
             _ => {}
         }
@@ -1229,7 +1254,8 @@ fn autostart() -> Result<(), String> {
     } else {
         std::fs::create_dir_all(path.parent().ok_or("No autostart directory")?)
             .map_err(|e| e.to_string())?;
-        let executable = std::env::current_exe().map_err(|e| e.to_string())?;
+        let executable =
+            state::installed_executable(std::env::current_exe().map_err(|e| e.to_string())?);
         state::atomic_write(&path, state::autostart_entry(&executable)?.as_bytes())
     }
 }
@@ -1800,6 +1826,30 @@ mod tests {
         assert!(!launcher.0.state.borrow().favorites.is_empty());
         wipe.emit_clicked();
         assert!(launcher.0.state.borrow().favorites.is_empty());
+
+        // An unconfirmed first click lapses; a later click only re-arms.
+        launcher
+            .0
+            .state
+            .borrow_mut()
+            .usage
+            .insert("x.desktop".into(), Usage { count: 1, last: 1 });
+        erase.emit_clicked();
+        pump(40);
+        assert_eq!(erase.label().unwrap(), "Clear launch history");
+        erase.emit_clicked();
+        assert!(
+            !launcher.0.state.borrow().usage.is_empty(),
+            "lapsed confirmation does not erase"
+        );
+        erase.emit_clicked();
+        assert!(launcher.0.state.borrow().usage.is_empty());
+        pump(40);
+        assert_eq!(
+            erase.label().unwrap(),
+            "Clear launch history",
+            "confirmed action leaves no pending lapse"
+        );
 
         fields_save_when_focus_moves_away(launcher, &ui, root);
 

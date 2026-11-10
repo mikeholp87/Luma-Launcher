@@ -148,6 +148,16 @@ pub fn atomic_write(path: &Path, data: &[u8]) -> Result<(), String> {
     result.map_err(|e: io::Error| e.to_string())
 }
 
+/// Path the running binary was started from. Linux appends " (deleted)" to
+/// `current_exe` once a package upgrade replaces the file; the replacement
+/// lives at the original path.
+pub fn installed_executable(current: PathBuf) -> PathBuf {
+    use std::os::unix::ffi::OsStrExt;
+    match current.as_os_str().as_bytes().strip_suffix(b" (deleted)") {
+        Some(original) => PathBuf::from(std::ffi::OsStr::from_bytes(original)),
+        None => current,
+    }
+}
 pub fn autostart_entry(executable: &Path) -> Result<String, String> {
     let value = executable.to_str().ok_or("Executable path must be UTF-8")?;
     if !executable.is_absolute()
@@ -285,6 +295,23 @@ mod tests {
         assert!(load::<Config>(&path).is_err());
         assert_eq!(fs::read_to_string(&path).unwrap(), "not valid toml");
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn upgraded_binary_autostarts_from_its_installed_path() {
+        assert_eq!(
+            installed_executable("/usr/bin/luma-launcher (deleted)".into()),
+            PathBuf::from("/usr/bin/luma-launcher")
+        );
+        assert_eq!(
+            installed_executable("/opt/luma (deleted) dir/luma-launcher".into()),
+            PathBuf::from("/opt/luma (deleted) dir/luma-launcher")
+        );
+        let entry = autostart_entry(&installed_executable(
+            "/usr/bin/luma-launcher (deleted)".into(),
+        ))
+        .unwrap();
+        assert!(entry.contains("Exec=\"/usr/bin/luma-launcher\" --background"));
     }
 
     #[test]

@@ -12,28 +12,35 @@ pub fn web(query: &str) -> Option<String> {
             return Some(u.into());
         }
     }
+    // `example.com:8080` parses as a URL with scheme `example.com`.
     let u = match url::Url::parse(query) {
-        Ok(u) => u,
-        Err(_) => url::Url::parse(&format!("https://{query}"))
-            .ok()
-            .filter(|_| bare_domain(query))?,
+        Ok(u) if matches!(u.scheme(), "http" | "https") => u,
+        _ => url::Url::parse(&format!("{}://{query}", bare_address(query)?)).ok()?,
     };
-    (matches!(u.scheme(), "http" | "https")
-        && u.host_str().is_some()
-        && u.username().is_empty()
-        && u.password().is_none())
-    .then(|| u.into())
+    (u.host_str().is_some() && u.username().is_empty() && u.password().is_none()).then(|| u.into())
 }
-/// `github.com/rust-lang` style input without a scheme. Only well-known TLDs
-/// qualify so app IDs like `org.gnome.Nautilus` and file names stay searches.
-fn bare_domain(query: &str) -> bool {
+/// Scheme for `github.com/rust-lang` or `localhost:3000` style input. Only
+/// well-known TLDs qualify so app IDs like `org.gnome.Nautilus` and file
+/// names stay searches; local development servers get plain HTTP.
+fn bare_address(query: &str) -> Option<&'static str> {
     const TLDS: [&str; 9] = ["com", "org", "net", "io", "dev", "app", "ai", "edu", "gov"];
-    let host = query.split(['/', '?', '#']).next().unwrap_or_default();
-    host.is_ascii()
-        && !host.contains(['@', ':', ' '])
-        && host.rsplit_once('.').is_some_and(|(name, tld)| {
+    let authority = query.split(['/', '?', '#']).next().unwrap_or_default();
+    let (host, port) = match authority.split_once(':') {
+        Some((host, port)) => (host, Some(port)),
+        None => (authority, None),
+    };
+    let valid_port = |p: &str| (1..=5).contains(&p.len()) && p.bytes().all(|b| b.is_ascii_digit());
+    if !host.is_ascii() || host.contains(['@', ' ']) || port.is_some_and(|p| !valid_port(p)) {
+        return None;
+    }
+    if host.eq_ignore_ascii_case("localhost") || host == "127.0.0.1" {
+        return port.is_some().then_some("http");
+    }
+    host.rsplit_once('.')
+        .is_some_and(|(name, tld)| {
             !name.is_empty() && TLDS.contains(&tld.to_ascii_lowercase().as_str())
         })
+        .then_some("https")
 }
 /// Human-readable result: no float noise (`0.1+0.2` is `0.3`) and no
 /// exponent-free megastrings for huge values.
@@ -181,6 +188,26 @@ mod tests {
             "firefox",
             "a b.com",
             "user@site.com",
+        ] {
+            assert!(web(q).is_none(), "{q}");
+        }
+    }
+    #[test]
+    fn host_and_port_open_without_a_scheme() {
+        assert_eq!(
+            web("example.com:8080/a").unwrap(),
+            "https://example.com:8080/a"
+        );
+        assert_eq!(web("localhost:3000").unwrap(), "http://localhost:3000/");
+        assert_eq!(web("127.0.0.1:8000/x").unwrap(), "http://127.0.0.1:8000/x");
+        for q in [
+            "localhost",
+            "javascript:alert(1)",
+            "mailto:me@example.com",
+            "ftp://example.com",
+            "example.com:port",
+            "example.com:123456",
+            "notes.md:12",
         ] {
             assert!(web(q).is_none(), "{q}");
         }
