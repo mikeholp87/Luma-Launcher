@@ -1,5 +1,6 @@
 /target/
 /dist/
+/apt/
 *.tmp
 core
 core.*
