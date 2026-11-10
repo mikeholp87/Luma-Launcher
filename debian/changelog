@@ -1,0 +1,8 @@
+luma-launcher (0.1.0) unstable; urgency=medium
+
+  * Initial release.
+  * Typed gtk-rs 0.11 interface with no unsafe code in the application.
+  * Settings save automatically; font size scales the whole launcher and the
+    system theme follows the desktop colour preference.
+
+ -- Mike Holp <mikeholp87@gmail.com>  Tue, 10 Nov 2026 09:00:00 +0700

@@ -164,6 +164,18 @@ The script requires `luma-launcher` in PATH during setup and stores its resolved
 absolute path. Disable it with `bash scripts/autostart.sh disable`. Only Luma's
 own XDG autostart entry is managed.
 
+### Install a release (Debian 13 / Ubuntu 24.04 or newer, amd64)
+
+Download the `.deb` and `SHA256SUMS` from the
+[latest release](https://github.com/mikeholp87/Luma-Launcher/releases/latest), then:
+
+```bash
+sha256sum -c --ignore-missing SHA256SUMS
+sudo apt install ./luma-launcher_*_amd64.deb
+```
+
+Releases are cut as described in [docs/releasing.md](docs/releasing.md).
+
 ### Build a Debian package
 
 ```bash
@@ -183,11 +195,20 @@ Install the locally built package with:
 sudo apt install ./dist/luma-launcher_0.1.0_amd64.deb
 ```
 
-Dependencies are generated from the executable's actual shared-library usage.
-A package built on Testing/Unstable is not automatically verified for Stable.
-A Debian Stable [container recipe](packaging/Containerfile) and
-[CI workflow](.github/workflows/check.yml) are supplied, but have not been executed
-in the restricted development environment. No hosted binary release is assumed.
+Dependencies are generated from the executable's actual shared-library usage, so
+the package needs at least the glibc and library versions of the machine that built
+it. Build on the oldest distribution you want to support; the
+[CI workflow](.github/workflows/check.yml) builds on Debian 13 and uploads the
+`.deb` as an artifact, and a [container recipe](packaging/Containerfile) is supplied.
+
+Package metadata (maintainer, homepage, recommended packages, description) lives in
+[`debian/control`](debian/control). The package also ships a man page
+([`packaging/luma-launcher.1`](packaging/luma-launcher.1)), a machine-readable
+[`debian/copyright`](debian/copyright), `md5sums` for `debsums`, and the changelog.
+
+To cut a release, bump `version` in `Cargo.toml` **and** add a matching entry at the
+top of [`debian/changelog`](debian/changelog); `scripts/package.sh` refuses to build
+when the two differ.
 
 ## Assign a global shortcut
 

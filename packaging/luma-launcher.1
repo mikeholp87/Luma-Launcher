@@ -1,0 +1,78 @@
+.TH LUMA-LAUNCHER 1 "@DATE@" "Luma Launcher @VERSION@" "User Commands"
+.SH NAME
+luma-launcher \- keyboard-driven application launcher
+.SH SYNOPSIS
+.B luma-launcher
+[\fIOPTION\fR]
+.SH DESCRIPTION
+.B luma-launcher
+is a native GTK4 application launcher. The first invocation starts a resident
+process; later invocations talk to it over the session bus, so showing the
+palette is instant. With no option, the palette is shown.
+.PP
+Bind a desktop shortcut to
+.B luma-launcher \-\-toggle
+(or register one from Settings through the desktop portal).
+.SH OPTIONS
+Only one option may be given.
+.TP
+.B \-\-show
+Show the palette.
+.TP
+.B \-\-hide
+Hide the palette.
+.TP
+.B \-\-toggle
+Show the palette, or hide it if it is already visible.
+.TP
+.B \-\-settings
+Open the Settings window.
+.TP
+.B \-\-refresh
+Rescan installed applications.
+.TP
+.B \-\-background
+Start the resident process without showing the palette (used for autostart).
+.TP
+.B \-\-quit
+Stop the resident process.
+.TP
+.B \-\-diagnostics
+Print environment information (desktop, GTK version, usage source) and exit.
+.TP
+.B \-\-version
+Print the version and exit.
+.SH USAGE
+Type to search; the palette also understands
+.TP
+.B = \fIexpression\fR
+Calculator. Enter copies the result.
+.TP
+.B g \fIterms\fR, ddg \fIterms\fR
+Web search in the default browser.
+.TP
+.B \fIexample.com\fR or a full URL
+Open it in the default browser.
+.PP
+Keys: Up/Down or Ctrl+J/K or Ctrl+N/P select; Enter launches; Ctrl+1 to Ctrl+9
+launch the Nth result; Ctrl+Enter shows desktop actions; Ctrl+D pins or unpins;
+Ctrl+Delete forgets an application's history; Ctrl+, opens Settings; Esc clears
+the search, then closes the palette.
+.SH FILES
+.TP
+.I ~/.config/luma-launcher/config.toml
+Preferences (also editable in Settings, which saves automatically).
+.TP
+.I ~/.local/state/luma-launcher/history.toml
+Favourites and launch history.
+.TP
+.I ~/.local/state/luma-launcher/applications.log
+Output of launched applications.
+.SH ENVIRONMENT
+.TP
+.B XDG_CONFIG_HOME, XDG_STATE_HOME, XDG_DATA_HOME
+Override the locations above.
+.SH SEE ALSO
+.BR sqlite3 (1)
+.PP
+Project home: https://github.com/mikeholp87/Luma-Launcher

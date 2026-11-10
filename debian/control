@@ -1,9 +1,23 @@
 Source: luma-launcher
 Section: utils
 Priority: optional
-Maintainer: Luma Launcher contributors <noreply@example.invalid>
+Maintainer: Mike Holp <mikeholp87@gmail.com>
 Standards-Version: 4.7.0
+Homepage: https://github.com/mikeholp87/Luma-Launcher
+Vcs-Browser: https://github.com/mikeholp87/Luma-Launcher
+Vcs-Git: https://github.com/mikeholp87/Luma-Launcher.git
 
 Package: luma-launcher
 Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: sqlite3
+Suggests: xdg-desktop-portal
 Description: Native GTK4 application launcher
+ Luma Launcher is a keyboard-driven application launcher for Linux desktops.
+ It searches installed applications by name, description, keywords and
+ acronyms, ranks them by your own launch history and desktop usage, and
+ launches them through GIO without interpreting Exec fields itself.
+ .
+ It also provides a calculator, quick web searches, desktop actions, pinned
+ favourites, dark, light and system themes, and a global shortcut through the
+ desktop portal. Reading usage statistics on KDE needs the sqlite3 command.
