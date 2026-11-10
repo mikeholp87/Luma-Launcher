@@ -1405,6 +1405,167 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    /// Renders the palette with sample applications for the project site:
+    /// `LUMA_SCREENSHOTS=site/assets xvfb-run -a cargo test site_screenshots -- --ignored`
+    #[test]
+    #[ignore = "writes site images; run on demand"]
+    fn site_screenshots() {
+        let Some(out) = std::env::var_os("LUMA_SCREENSHOTS").map(std::path::PathBuf::from) else {
+            eprintln!("skipped: set LUMA_SCREENSHOTS to an output directory");
+            return;
+        };
+        gtk::init().expect("display");
+        let root = std::env::temp_dir().join(format!("luma-shots-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&out).unwrap();
+        std::env::set_var("XDG_CONFIG_HOME", &root);
+        std::env::set_var("XDG_STATE_HOME", &root);
+        let app = gtk::Application::builder()
+            .application_id("io.github.luma_launcher.Screenshots")
+            .flags(gio::ApplicationFlags::NON_UNIQUE)
+            .build();
+        app.register(None::<&gio::Cancellable>).unwrap();
+        let launcher = Launcher::new(&app);
+        while launcher.0.indexing.get() {
+            pump(1);
+        }
+        let icon = |name: &str| {
+            [
+                "hicolor/scalable/apps",
+                "hicolor/256x256/apps",
+                "hicolor/192x192/apps",
+                "hicolor/128x128/apps",
+                "hicolor/64x64/apps",
+                "breeze/apps/48",
+            ]
+            .iter()
+            .flat_map(|dir| {
+                ["svg", "png"].map(|ext| format!("/usr/share/icons/{dir}/{name}.{ext}"))
+            })
+            .find(|path| std::path::Path::new(path).exists())
+            .unwrap_or_default()
+        };
+        let sample = [
+            (
+                "firefox-esr",
+                "Firefox",
+                "Browse the World Wide Web",
+                "web browser internet",
+            ),
+            (
+                "org.kde.dolphin",
+                "Dolphin",
+                "File Manager",
+                "files folders",
+            ),
+            (
+                "libreoffice-writer",
+                "LibreOffice Writer",
+                "Create and edit text and graphics in letters, reports, documents and Web pages",
+                "word processor",
+            ),
+            (
+                "org.kde.kdenlive",
+                "Kdenlive",
+                "Video Editor",
+                "video editing",
+            ),
+            (
+                "com.obsproject.Studio",
+                "OBS Studio",
+                "Free and Open Source Streaming/Recording Software",
+                "video capture",
+            ),
+            (
+                "vlc",
+                "VLC media player",
+                "Read, capture, broadcast your multimedia streams",
+                "video music player",
+            ),
+            (
+                "gimp",
+                "GNU Image Manipulation Program",
+                "Create images and edit photographs",
+                "graphics photo",
+            ),
+            (
+                "blender",
+                "Blender",
+                "3D modeling, animation, rendering and post-production",
+                "3d graphics",
+            ),
+            (
+                "org.gnome.Calculator",
+                "Calculator",
+                "Perform arithmetic, scientific or financial calculations",
+                "math",
+            ),
+        ];
+        *launcher.0.entries.borrow_mut() = sample
+            .iter()
+            .map(|(id, name, description, fields)| {
+                Entry::new(
+                    format!("{id}.desktop"),
+                    (*name).into(),
+                    (*description).into(),
+                    icon(id),
+                    (*fields).into(),
+                )
+            })
+            .collect();
+        {
+            let mut state = launcher.0.state.borrow_mut();
+            state.favorites.insert("firefox-esr.desktop".into());
+            for (i, (id, ..)) in sample.iter().enumerate() {
+                let count = [40, 25, 9, 31, 18, 12, 6, 3, 20][i];
+                state
+                    .usage
+                    .insert(format!("{id}.desktop"), Usage { count, last: count });
+            }
+        }
+        launcher.0.system.borrow_mut().clear();
+        launcher.0.config.borrow_mut().system_usage = false;
+        launcher.invalidate();
+        // Xvfb's pointer rests mid-screen and would hover a row.
+        launcher.0.list.set_can_target(false);
+
+        let shoot = |theme: &str, query: &str, results: usize, name: &str| {
+            {
+                let mut cfg = launcher.0.config.borrow_mut();
+                cfg.theme = theme.into();
+                cfg.results = results;
+                cfg.clear_on_show = false;
+            }
+            launcher.theme();
+            launcher.0.input.set_text(query);
+            launcher.command("--show");
+            launcher.0.input.set_position(-1);
+            pump(40);
+            let window = &launcher.0.window;
+            let (width, height) = (window.width() as f32, window.height() as f32);
+            let snapshot = gtk::Snapshot::new();
+            snapshot.scale(2.0, 2.0);
+            gtk::WidgetPaintable::new(Some(window)).snapshot(
+                &snapshot,
+                width.into(),
+                height.into(),
+            );
+            let node = snapshot.to_node().expect("palette drew nothing");
+            let viewport = gtk::graphene::Rect::new(0.0, 0.0, width * 2.0, height * 2.0);
+            let texture = window
+                .renderer()
+                .expect("realized window")
+                .render_texture(&node, Some(&viewport));
+            texture.save_to_png(out.join(name)).unwrap();
+            launcher.hide();
+        };
+        shoot("dark", "", 6, "palette-dark.png");
+        shoot("light", "video", 6, "search-light.png");
+        shoot("dark", "= 1920 / 16 * 9", 6, "calculator-dark.png");
+        launcher.0.window.destroy();
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     fn checkbox(widget: &gtk::Widget) -> Option<gtk::CheckButton> {
         if let Some(check) = widget.downcast_ref::<gtk::CheckButton>() {
             return Some(check.clone());
