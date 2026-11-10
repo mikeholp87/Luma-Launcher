@@ -244,6 +244,11 @@ impl Launcher {
             .application(app)
             .title("Luma Launcher")
             .decorated(false)
+            // A resizable GTK window stores each measured size as its new
+            // default, freezing the palette at the first showing (often the
+            // one-row "Loading" list). Fixed, it always uses Settings' width
+            // and the height of the current results.
+            .resizable(false)
             .css_classes(["luma", "launcher"])
             .build();
         let layout = gtk::Box::builder()
@@ -1384,6 +1389,7 @@ mod tests {
         let launcher = Launcher::new(&app);
         focus_dismissal_and_settings_save_rollback(&launcher, &root);
         every_setting_takes_effect(&launcher, &root);
+        window_follows_settings_not_first_showing(&launcher);
         launcher.0.window.destroy();
         std::fs::remove_dir_all(root).unwrap();
     }
@@ -1861,6 +1867,53 @@ mod tests {
             toml::to_string(&*live).unwrap()
         );
         drop(live);
+    }
+
+    /// The palette is sized from Settings and its current results every time
+    /// it is shown, never frozen at whatever the first showing measured.
+    fn window_follows_settings_not_first_showing(launcher: &Launcher) {
+        let window = launcher.0.window.clone();
+        let width = launcher.0.config.borrow().width;
+        let shown = |launcher: &Launcher| {
+            launcher.command("--show");
+            for _ in 0..300 {
+                pump(1);
+                if window.is_mapped() && window.width() > 0 {
+                    break;
+                }
+            }
+            pump(20);
+            let size = (window.width(), window.height());
+            let natural = window.measure(gtk::Orientation::Vertical, width).1;
+            launcher.hide();
+            pump(5);
+            (size, natural)
+        };
+        // Startup: the first showing can happen while discovery still runs.
+        launcher.theme();
+        *launcher.0.entries.borrow_mut() = vec![];
+        launcher.0.indexing.set(true);
+        let ((loading_width, loading_height), _) = shown(launcher);
+        launcher.0.indexing.set(false);
+        *launcher.0.entries.borrow_mut() = (0..8)
+            .map(|i| app(&format!("app{i}.desktop"), &format!("App {i}"), "", ""))
+            .collect();
+        launcher.invalidate();
+        let ((full_width, full_height), natural) = shown(launcher);
+        assert_eq!(loading_width, width, "width follows Settings");
+        assert_eq!(full_width, width, "width follows Settings");
+        assert!(
+            full_height > loading_height + 100,
+            "palette grew from {loading_height} to {full_height}"
+        );
+        assert_eq!(full_height, natural, "height fits the results");
+
+        launcher.0.config.borrow_mut().width = 900;
+        launcher.theme();
+        let ((wide, _), _) = shown(launcher);
+        launcher.0.config.borrow_mut().width = width;
+        launcher.theme();
+        assert_eq!(wide, 900, "a new width applies to the shown palette");
     }
 
     /// No Enter and no save button: leaving a field saves it, a rejected
