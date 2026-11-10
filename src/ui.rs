@@ -146,6 +146,7 @@ struct Inner {
     results: RefCell<Vec<usize>>,
     selected: Cell<i32>,
     visible: Cell<bool>,
+    focused_since_show: Cell<bool>,
     config_writable: bool,
     state_writable: bool,
     config: RefCell<Config>,
@@ -308,6 +309,7 @@ impl Launcher {
             results: RefCell::new(vec![]),
             selected: Cell::new(0),
             visible: Cell::new(false),
+            focused_since_show: Cell::new(false),
             config_writable: config.is_ok(),
             state_writable: history.is_ok(),
             config: RefCell::new(config.unwrap_or_default()),
@@ -395,7 +397,12 @@ impl Launcher {
             #[weak(rename_to = t)]
             this,
             move |window| {
-                if !window.is_active() {
+                // GTK 4.14 on X11 can report a stale loss of focus right
+                // after the palette is shown again; only a palette that has
+                // been focused since showing is dismissed by losing focus.
+                if window.is_active() {
+                    t.0.focused_since_show.set(true);
+                } else if t.0.focused_since_show.get() {
                     t.hide();
                 }
             }
@@ -474,6 +481,10 @@ impl Launcher {
             self.harvest();
         }
         self.render();
+        let window = &self.0.window;
+        self.0
+            .focused_since_show
+            .set(window.is_visible() && window.is_active());
         self.0.visible.set(true);
         self.0.window.present();
         self.0.input.grab_focus();
@@ -1414,7 +1425,12 @@ mod tests {
         assert!(window.is_visible());
 
         // No compositor events have been dispatched, so the window is inactive.
+        // An inactive report before the palette was ever focused is stale.
         assert!(!window.is_active());
+        window.notify("is-active");
+        assert!(window.is_visible(), "not dismissed before gaining focus");
+        // Once focused, losing focus dismisses it.
+        launcher.0.focused_since_show.set(true);
         window.notify("is-active");
         assert!(!window.is_visible());
         assert!(!launcher.0.visible.get());

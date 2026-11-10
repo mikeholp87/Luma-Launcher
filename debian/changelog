@@ -3,6 +3,8 @@ luma-launcher (0.1.2) unstable; urgency=medium
   * The launcher window always uses the width from Settings and the height
     of its results, instead of sometimes staying at the small size it had
     when first shown.
+  * On X11 with GTK 4.14, the launcher no longer disappears right after
+    being shown again because of a stale loss-of-focus report.
 
  -- Mike Holp <mikeholp87@gmail.com>  Tue, 10 Nov 2026 22:32:00 +0700
 
