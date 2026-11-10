@@ -1,3 +1,11 @@
+luma-launcher (0.1.2) unstable; urgency=medium
+
+  * The launcher window always uses the width from Settings and the height
+    of its results, instead of sometimes staying at the small size it had
+    when first shown.
+
+ -- Mike Holp <mikeholp87@gmail.com>  Tue, 10 Nov 2026 22:32:00 +0700
+
 luma-launcher (0.1.1) unstable; urgency=medium
 
   * KDE usage ranking counts application launches instead of files and
