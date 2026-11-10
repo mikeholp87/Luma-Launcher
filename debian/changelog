@@ -1,3 +1,18 @@
+luma-launcher (0.1.1) unstable; urgency=medium
+
+  * KDE usage ranking counts application launches instead of files and
+    folders an application opened.
+  * Start at login points at the installed binary after a package upgrade.
+  * Opening desktop shortcut settings no longer leaves zombie processes and
+    reports spawn errors.
+  * Destructive Settings actions must be confirmed within 5 seconds.
+  * Desktop usage is re-read when the launcher opens rather than on every
+    database write.
+  * host:port input such as localhost:3000 opens as a web address.
+  * Diagnostics no longer report KDE usage on other desktops.
+
+ -- Mike Holp <mikeholp87@gmail.com>  Tue, 10 Nov 2026 22:14:27 +0700
+
 luma-launcher (0.1.0) unstable; urgency=medium
 
   * Initial release.
