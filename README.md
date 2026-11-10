@@ -164,6 +164,18 @@ The script requires `luma-launcher` in PATH during setup and stores its resolved
 absolute path. Disable it with `bash scripts/autostart.sh disable`. Only Luma's
 own XDG autostart entry is managed.
 
+### Install a release (Debian 13 / Ubuntu 24.04 or newer, amd64)
+
+Download the `.deb` and `SHA256SUMS` from the
+[latest release](https://github.com/mikeholp87/Luma-Launcher/releases/latest), then:
+
+```bash
+sha256sum -c --ignore-missing SHA256SUMS
+sudo apt install ./luma-launcher_*_amd64.deb
+```
+
+Releases are cut as described in [docs/releasing.md](docs/releasing.md).
+
 ### Build a Debian package
 
 ```bash
