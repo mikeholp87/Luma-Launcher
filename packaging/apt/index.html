@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Luma Launcher apt repository</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; padding: 0 1rem; }
+  pre { background: #f2f2f2; padding: 1rem; overflow-x: auto; border-radius: 6px; }
+  @media (prefers-color-scheme: dark) { body { background: #1b1b1f; color: #e6e6e6; } pre { background: #2a2a30; } a { color: #8da9ff; } }
+</style>
+</head>
+<body>
+<h1>Luma Launcher apt repository</h1>
+<p>Signed packages for Debian 13 / Ubuntu 24.04 and newer (amd64).
+This is a repository, not a web page for people: add it to apt like this.</p>
+<pre>sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://mikeholp87.github.io/Luma-Launcher/apt/luma-launcher.asc | sudo tee /etc/apt/keyrings/luma-launcher.asc &gt;/dev/null
+echo "deb [signed-by=/etc/apt/keyrings/luma-launcher.asc] https://mikeholp87.github.io/Luma-Launcher/apt/ ./" | sudo tee /etc/apt/sources.list.d/luma-launcher.list
+sudo apt update &amp;&amp; sudo apt install luma-launcher</pre>
+<p>Project: <a href="https://github.com/mikeholp87/Luma-Launcher">github.com/mikeholp87/Luma-Launcher</a></p>
+</body>
+</html>

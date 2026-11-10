@@ -164,7 +164,18 @@ The script requires `luma-launcher` in PATH during setup and stores its resolved
 absolute path. Disable it with `bash scripts/autostart.sh disable`. Only Luma's
 own XDG autostart entry is managed.
 
-### Install a release (Debian 13 / Ubuntu 24.04 or newer, amd64)
+### Install with apt (Debian 13 / Ubuntu 24.04 or newer, amd64)
+
+This adds the signed repository, so updates arrive through `apt upgrade`:
+
+```bash
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://mikeholp87.github.io/Luma-Launcher/apt/luma-launcher.asc | sudo tee /etc/apt/keyrings/luma-launcher.asc >/dev/null
+echo "deb [signed-by=/etc/apt/keyrings/luma-launcher.asc] https://mikeholp87.github.io/Luma-Launcher/apt/ ./" | sudo tee /etc/apt/sources.list.d/luma-launcher.list
+sudo apt update && sudo apt install luma-launcher
+```
+
+### Install a single release (no repository, no updates)
 
 Download the `.deb` and `SHA256SUMS` from the
 [latest release](https://github.com/mikeholp87/Luma-Launcher/releases/latest), then:

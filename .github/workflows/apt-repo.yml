@@ -1,0 +1,82 @@
+name: APT repository
+# Rebuilds the signed flat apt repository from every GitHub Release and
+# publishes it, next to the project site, to GitHub Pages at /apt/.
+# Runs after each successful tag release, on pushes to main (so the site does
+# not go stale), and on demand. Pull requests that touch it do a dry run with a
+# throwaway key and never deploy. See docs/releasing.md.
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - .github/workflows/apt-repo.yml
+      - scripts/build-apt-repo.sh
+      - scripts/test-apt-repo.sh
+      - packaging/apt/**
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    # Only successful tag releases trigger the workflow_run path; PR dry runs
+    # of the Release workflow and forks' pull requests do not.
+    if: >-
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')) &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends dpkg-dev apt-utils gnupg
+      - name: Fetch every released package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir apt
+          for tag in $(gh release list --limit 1000 --json tagName -q '.[].tagName'); do
+            gh release download "$tag" --pattern 'luma-launcher_*.deb' --dir apt
+          done
+          ls -l apt
+      - name: Sign with the real key
+        if: github.event_name != 'pull_request'
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: |
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          install -d -m 700 "$GNUPGHOME"
+          printf '%s\n' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+          bash scripts/build-apt-repo.sh apt packaging/apt/luma-launcher.asc
+          echo "PUBKEY=$GITHUB_WORKSPACE/packaging/apt/luma-launcher.asc" >>"$GITHUB_ENV"
+      - name: Dry run with a throwaway key (pull requests)
+        if: github.event_name == 'pull_request'
+        run: |
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          install -d -m 700 "$GNUPGHOME"
+          gpg --batch --passphrase '' --quick-generate-key "Dry Run <dry-run@invalid>" ed25519 sign never
+          gpg --armor --export dry-run@invalid >"$RUNNER_TEMP/dry-run.asc"
+          bash scripts/build-apt-repo.sh apt "$RUNNER_TEMP/dry-run.asc"
+          echo "PUBKEY=$RUNNER_TEMP/dry-run.asc" >>"$GITHUB_ENV"
+      - name: apt accepts the repository and rejects tampering
+        run: bash scripts/test-apt-repo.sh apt "$PUBKEY"
+      - uses: actions/jekyll-build-pages@v1
+      - uses: actions/upload-pages-artifact@v3
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

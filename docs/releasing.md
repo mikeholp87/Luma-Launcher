@@ -41,5 +41,32 @@ publishing. **Run workflow** on the Actions tab does the same from a branch.
 Debian 13 or Ubuntu 24.04 and newer (amd64). The package's library requirements come
 from the build machine, so supporting an older distribution means building on it.
 
-Automatic updates need an apt repository, which is a separate step (publish the
-`.deb` into a signed flat repository on GitHub Pages).
+## The apt repository
+
+After each successful tag release, `.github/workflows/apt-repo.yml` rebuilds a signed
+*flat* apt repository from **every** GitHub Release `.deb` and deploys it, together
+with the project site, to GitHub Pages at `https://mikeholp87.github.io/Luma-Launcher/apt/`.
+It also runs on pushes to `main` (so the site does not go stale) and on demand
+(**Run workflow**). Users then get `sudo apt install luma-launcher` and updates through
+`apt upgrade` (see the README).
+
+- `scripts/build-apt-repo.sh` builds and signs the index, then verifies it against the
+  committed public key `packaging/apt/luma-launcher.asc`, so a mismatched secret fails
+  the publish instead of shipping a repository nobody can verify.
+- `scripts/test-apt-repo.sh` proves a stock `apt` accepts it and rejects a tampered copy.
+  Pull requests that touch this machinery run both with a throwaway key.
+
+### One-time setup
+
+1. Generate a dedicated signing key and store the private half as the repository secret
+   `APT_GPG_PRIVATE_KEY`; commit the public key as `packaging/apt/luma-launcher.asc`.
+2. Make Pages deploy from Actions (it also builds the existing Jekyll site):
+
+   ```bash
+   gh api -X PUT repos/mikeholp87/Luma-Launcher/pages -f build_type=workflow
+   ```
+
+### Rotating or losing the key
+
+Users trust `luma-launcher.asc`. A new key means every user must re-import it, so keep a
+backup of the private key (a password manager is fine).
