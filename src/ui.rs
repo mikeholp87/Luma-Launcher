@@ -547,7 +547,7 @@ impl Launcher {
         let cfg = self.0.config.borrow();
         let entries = self.0.entries.borrow();
         let state = self.state_view();
-        let results = if tools::is_application_query(q) {
+        let results = if tools::is_application_query(q, &cfg.search_engines) {
             search::search(
                 &entries,
                 q,
@@ -560,14 +560,11 @@ impl Launcher {
             vec![]
         };
         if let Some(expr) = q.strip_prefix('=') {
-            match tools::calculate(expr) {
-                Ok(v) => list.append(&label(&format!(
-                    "{}   ·   Enter to copy",
-                    tools::format_number(v)
-                ))),
+            match tools::evaluate(expr) {
+                Ok(text) => list.append(&label(&format!("{text}   ·   Enter to copy"))),
                 Err(e) => note(list, e),
             }
-        } else if let Some(uri) = tools::web(q) {
+        } else if let Some(uri) = tools::web(q, &cfg.search_engines) {
             list.append(&label(&format!("Open {uri}")));
         } else {
             for &i in &results {
@@ -632,7 +629,7 @@ impl Launcher {
         self.0.list.select_row(self.0.list.row_at_index(i).as_ref());
     }
     fn selected_id(&self) -> Option<String> {
-        if !tools::is_application_query(&self.query()) {
+        if !tools::is_application_query(&self.query(), &self.0.config.borrow().search_engines) {
             return None;
         }
         let i = *self
@@ -831,13 +828,14 @@ impl Launcher {
         let query = self.query();
         let q = query.trim();
         if let Some(expr) = q.strip_prefix('=') {
-            if let Ok(value) = tools::calculate(expr) {
-                WidgetExt::clipboard(&self.0.window).set_text(&tools::format_number(value));
+            if let Ok(text) = tools::evaluate(expr) {
+                WidgetExt::clipboard(&self.0.window).set_text(&text);
                 self.hide();
             }
             return;
         }
-        if let Some(uri) = tools::web(q) {
+        let uri = tools::web(q, &self.0.config.borrow().search_engines);
+        if let Some(uri) = uri {
             match gio::AppInfo::launch_default_for_uri(&uri, Some(&self.launch_context())) {
                 Ok(()) => self.hide(),
                 Err(e) => self.message(&e.to_string()),
@@ -1079,6 +1077,39 @@ impl Launcher {
                 ));
             }
         }
+        section(&layout, "Search keywords");
+        let keywords_help = wrapped(
+            "One per line: a keyword, then a URL where %s stands for your search. \
+             Type the keyword and your search, such as \"g rust\".",
+        );
+        keywords_help.add_css_class("settings-help");
+        layout.append(&keywords_help);
+        let keywords = gtk::TextView::builder()
+            .monospace(true)
+            .accepts_tab(false)
+            .wrap_mode(gtk::WrapMode::WordChar)
+            .tooltip_text("Search keywords")
+            .css_classes(["keywords"])
+            .build();
+        keywords_help.set_mnemonic_widget(Some(&keywords));
+        keywords.buffer().set_text(&tools::engines_to_text(
+            &self.0.config.borrow().search_engines,
+        ));
+        layout.append(&keywords);
+        // Saved on focus loss, like the text fields above.
+        let focus = gtk::EventControllerFocus::new();
+        focus.connect_contains_focus_notify(clone!(
+            #[weak(rename_to = t)]
+            self,
+            #[weak]
+            keywords,
+            move |focus| {
+                if !focus.contains_focus() {
+                    t.keywords_changed(&keywords.buffer());
+                }
+            }
+        ));
+        keywords.add_controller(focus);
         let tips = label("Ctrl+D: pin or unpin    Ctrl+Delete: forget an app");
         tips.add_css_class("settings-help");
         layout.append(&tips);
@@ -1149,6 +1180,33 @@ impl Launcher {
             }
         } else {
             self.message("Invalid setting or corrupt configuration; value not saved");
+        }
+    }
+    /// The search keywords box lost focus. Invalid text stays in the box so
+    /// it can be corrected instead of being thrown away.
+    fn keywords_changed(&self, buffer: &gtk::TextBuffer) {
+        let text = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false);
+        let mut cfg = self.0.config.borrow().clone();
+        let parsed = tools::engines_from_text(&text).and_then(|engines| {
+            cfg.search_engines = engines;
+            cfg.validate()
+        });
+        if let Err(e) = parsed {
+            self.message(&format!("{e}; search keywords not saved"));
+            return;
+        }
+        if cfg.search_engines == self.0.config.borrow().search_engines {
+            return;
+        }
+        if !self.0.config_writable {
+            self.message("Corrupt configuration preserved; repair it before saving.");
+        } else if let Err(e) = state::save(&config_path(), &cfg) {
+            self.message(&e)
+        } else {
+            buffer.set_text(&tools::engines_to_text(&cfg.search_engines));
+            *self.0.config.borrow_mut() = cfg;
+            self.render();
+            self.message("Search keywords saved.");
         }
     }
     /// A Settings toggle or button was activated.

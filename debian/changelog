@@ -1,3 +1,15 @@
+luma-launcher (0.1.3) unstable; urgency=medium
+
+  * Custom search keywords: add your own, such as "gh" for GitHub, in
+    Settings or in the search_engines table of config.toml.
+  * The calculator supports powers, phone-style percentages, pi, e,
+    functions such as sqrt(), hex and binary numbers, and converting
+    results with "in hex", "in bin" or "in dec".
+  * Search terms are encoded with %20 for spaces, so keyword URLs may
+    place them in a path.
+
+ -- Mike Holp <mikeholp87@gmail.com>  Wed, 11 Nov 2026 20:45:00 +0700
+
 luma-launcher (0.1.2) unstable; urgency=medium
 
   * The launcher window always uses the width from Settings and the height

@@ -78,6 +78,10 @@ window.luma.launcher {{ background: transparent; }}
 .luma entry.search {{ background: transparent; border-color: transparent; padding: 16px 12px; font-size: {font_size}px; }}
 .luma entry placeholder, .luma entry image {{ color: {muted}; opacity: 1; }}
 .luma entry selection {{ background: {selection}; color: {text}; }}
+.luma textview.keywords {{ border: 1px solid {border}; border-radius: 8px; padding: 8px 10px; font-family: monospace; font-size: 12px; }}
+.luma textview.keywords, .luma textview.keywords text {{ background: {surface}; color: {text}; caret-color: {text}; }}
+.luma textview.keywords text selection {{ background: {selection}; color: {text}; }}
+.luma textview.keywords:focus-within {{ outline: 2px solid {muted}; outline-offset: 2px; }}
 .luma button {{ background: {surface}; color: {text}; border: 1px solid {border}; border-radius: 8px; box-shadow: none; text-shadow: none; padding: 8px 12px; }}
 .luma button:hover {{ background: {selection}; border-color: {muted}; }}
 .luma button:active {{ background: {selection}; border-color: {accent}; }}

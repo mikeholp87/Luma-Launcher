@@ -22,6 +22,7 @@ pub struct Config {
     pub clear_on_show: bool,
     pub font_size: i32,
     pub system_usage: bool,
+    pub search_engines: crate::tools::Engines,
 }
 impl Default for Config {
     fn default() -> Self {
@@ -40,6 +41,7 @@ impl Default for Config {
             clear_on_show: true,
             font_size: 19,
             system_usage: true,
+            search_engines: crate::tools::default_engines(),
         }
     }
 }
@@ -57,6 +59,22 @@ impl Config {
             || !self.accent[1..].bytes().all(|c| c.is_ascii_hexdigit())
         {
             return Err("Invalid theme, size, result count, or accent color".into());
+        }
+        if self.search_engines.len() > 32 {
+            return Err("At most 32 search keywords".into());
+        }
+        for (keyword, template) in &self.search_engines {
+            if !(1..=16).contains(&keyword.chars().count())
+                || keyword.starts_with('=')
+                || keyword.chars().any(|c| c.is_whitespace() || c.is_control())
+                || template.len() > 512
+                || !template.contains("%s")
+                || crate::tools::search_url(template, "test").is_none()
+            {
+                return Err(format!(
+                    "Invalid search keyword \"{keyword}\": use a short word and an http(s) URL containing %s"
+                ));
+            }
         }
         Ok(())
     }
@@ -212,6 +230,43 @@ mod tests {
         }
     }
 
+    #[test]
+    fn search_keywords_round_trip_and_replace_the_defaults() {
+        let config: Config = toml::from_str("theme = 'light'").unwrap();
+        assert_eq!(config.search_engines, crate::tools::default_engines());
+        let config: Config =
+            toml::from_str("[search_engines]\ngh = 'https://github.com/search?q=%s'").unwrap();
+        assert_eq!(config.search_engines.keys().collect::<Vec<_>>(), ["gh"]);
+        config.validate().unwrap();
+        let saved = toml::to_string_pretty(&config).unwrap();
+        assert_eq!(
+            toml::from_str::<Config>(&saved).unwrap().search_engines,
+            config.search_engines
+        );
+    }
+    #[test]
+    fn invalid_search_keywords_are_rejected() {
+        for (keyword, template) in [
+            ("", "https://example.com/?q=%s"),
+            ("two words", "https://example.com/?q=%s"),
+            ("=calc", "https://example.com/?q=%s"),
+            ("averyveryverylongkeyword", "https://example.com/?q=%s"),
+            ("x", "https://example.com/"),
+            ("x", "javascript:alert(%s)"),
+            ("x", "file:///etc/%s"),
+        ] {
+            let mut c = Config::default();
+            c.search_engines.insert(keyword.into(), template.into());
+            assert!(c.validate().is_err(), "{keyword} {template}");
+        }
+        let c = Config {
+            search_engines: (0..33)
+                .map(|i| (format!("k{i}"), "https://example.com/?q=%s".into()))
+                .collect(),
+            ..Config::default()
+        };
+        assert!(c.validate().is_err());
+    }
     #[test]
     fn config_validation() {
         assert!(Config::default().validate().is_ok());

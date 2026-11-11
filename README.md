@@ -159,8 +159,9 @@ and back in afterwards.
   without continuous directory scanning.
 - **Appearance controls:** dark, light, and system theme modes; accent color,
   width, result count, font size, and compact layout settings.
-- **Quick tools:** bounded arithmetic with clipboard copying, Google/DuckDuckGo
-  prefixes, explicit HTTP/HTTPS URL opening, and declared desktop actions.
+- **Quick tools:** a bounded calculator (powers, percentages, functions, hex and
+  binary) with clipboard copying, configurable search keywords, explicit
+  HTTP/HTTPS URL opening, and declared desktop actions.
 - **Local privacy:** no telemetry, advertising, downloaded application icons, or
   tracking of activity outside Luma. Launch history can be disabled or cleared.
   When "system app usage" is enabled, Luma reads the desktop environment's own
@@ -359,13 +360,32 @@ behavior still needs live desktop verification.
 |---|---|
 | `= 25 * 4` | Calculate; Enter copies `100` |
 | `= (250 + 75) * 2` | Calculate with parentheses |
+| `= 2^10`, `= sqrt(2) * pi` | Powers, functions and constants |
+| `= 200 + 15%` | Percentages work like a phone calculator: `230` |
+| `= 255 in hex`, `= 0b1010 in dec` | Convert whole numbers between hex, binary and decimal |
 | `g best linux utilities` | Search Google in the default browser |
 | `ddg rust gtk4 tutorial` | Search DuckDuckGo in the default browser |
+| `gh luma` | Any search keyword you add in Settings |
 | `github.com/rust-lang` | Open a bare domain (`.com .org .net .io .dev .app .ai .edu .gov`) over HTTPS |
 | `https://www.rust-lang.org/` | Offer to open the URL in the default browser |
 
-The calculator accepts basic arithmetic and bounded nesting, rejects invalid or
-nonfinite results, and never evaluates executable code. Arbitrary shell-command
+The calculator supports `+ - * / ^` (powers bind tighter than signs, so `-2^2`
+is `-4`), postfix `%`, parentheses, `0x`/`0b` literals, `pi`, `e`, and `sqrt`,
+`abs`, `round`, `floor`, `ceil`, `ln`, `log` (base 10), `sin`, `cos` and `tan`
+(radians). It is a bounded hand-written parser that rejects invalid or nonfinite
+results and never evaluates executable code.
+
+Search keywords are edited in Settings, one `keyword URL` pair per line, or in
+`config.toml`. `%s` in the URL is replaced by the percent-encoded search terms,
+and only `http` and `https` URLs are accepted. Defining the table replaces the
+built-in `g` and `ddg` keywords:
+
+```toml
+[search_engines]
+g = "https://www.google.com/search?q=%s"
+gh = "https://github.com/search?q=%s"
+w = "https://en.wikipedia.org/wiki/%s"
+``` Arbitrary shell-command
 mode is not implemented. Ordinary application-search input cannot run shell commands.
 
 ## Command-line interface
