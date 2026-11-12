@@ -1,3 +1,13 @@
+luma-launcher (0.1.4) unstable; urgency=medium
+
+  * Search system settings pages like KRunner: typing "mouse" or "wifi"
+    finds the matching KDE System Settings module (or GNOME Settings panel)
+    and opens that page. Settings pages rank after applications and are not
+    listed until you type.
+  * --diagnostics reports the number of settings pages found.
+
+ -- Mike Holp <mikeholp87@gmail.com>  Thu, 12 Nov 2026 14:10:01 +0700
+
 luma-launcher (0.1.3) unstable; urgency=medium
 
   * Custom search keywords: add your own, such as "gh" for GitHub, in
