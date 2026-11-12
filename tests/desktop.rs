@@ -62,3 +62,21 @@ fn xdg_precedence_and_duplicate_ids() {
     );
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn settings_modules_are_recognised() {
+    use luma_launcher::launch::is_settings_module;
+    // KDE System Settings page.
+    assert!(is_settings_module(&desktop(
+        "NoDisplay=true\nX-KDE-AliasFor=systemsettings\n"
+    )));
+    // GNOME Settings panel; OnlyShowIn keeps it off other desktops.
+    let panel = "NoDisplay=true\nCategories=GNOME;Settings;X-GNOME-Settings-Panel;\n";
+    assert!(is_settings_module(&desktop(panel)));
+    assert!(!is_settings_module(&desktop(&format!(
+        "{panel}OnlyShowIn=NoSuchDesktop;\n"
+    ))));
+    // Ordinary hidden helpers and normal applications are not settings pages.
+    assert!(!is_settings_module(&desktop("NoDisplay=true\n")));
+    assert!(!is_settings_module(&desktop("Categories=Utility;\n")));
+}

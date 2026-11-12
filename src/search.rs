@@ -10,6 +10,9 @@ pub struct Entry {
     pub normalized: String,
     pub normalized_description: String,
     pub acronym: String,
+    /// A system settings page rather than an application. Hidden from the
+    /// empty view and ranked after applications that match equally well.
+    pub setting: bool,
 }
 impl Entry {
     pub fn new(
@@ -34,6 +37,7 @@ impl Entry {
             normalized,
             normalized_description,
             acronym,
+            setting: false,
         }
     }
 }
@@ -73,6 +77,10 @@ pub fn search(
         .iter()
         .enumerate()
         .filter_map(|(i, e)| {
+            // Dozens of settings pages would otherwise fill the default view.
+            if q.is_empty() && e.setting {
+                return None;
+            }
             let mut spread = 0;
             let tier = if q.is_empty() {
                 0
@@ -116,6 +124,7 @@ pub fn search(
             .then(b.3.cmp(&a.3))
             .then(b.4.cmp(&a.4))
             .then(b.5.cmp(&a.5))
+            .then(entries[a.0].setting.cmp(&entries[b.0].setting))
             .then(entries[a.0].normalized.cmp(&entries[b.0].normalized))
             .then(entries[a.0].id.cmp(&entries[b.0].id))
     });
@@ -236,6 +245,36 @@ mod tests {
             ..State::default()
         };
         assert_eq!(search(&entries, "", &state, true, true, 8), vec![1, 0]);
+    }
+
+    fn setting(name: &str) -> Entry {
+        Entry {
+            setting: true,
+            ..entry(name)
+        }
+    }
+
+    #[test]
+    fn settings_are_searchable_but_not_listed_by_default() {
+        let entries = vec![
+            entry("Mousepad"),
+            setting("Mouse"),
+            setting("About this System"),
+        ];
+        let state = State::default();
+        // The empty view lists applications only.
+        assert_eq!(search(&entries, "", &state, true, true, 8), vec![0]);
+        // A query finds the settings page ("Mouse" is the exact match).
+        assert_eq!(search(&entries, "mouse", &state, true, true, 8), vec![1, 0]);
+        assert!(search(&entries, "about", &state, true, true, 8).contains(&2));
+    }
+
+    #[test]
+    fn applications_rank_before_equal_settings() {
+        // Same tier, no usage: the application wins even though it sorts later by name.
+        let entries = vec![setting("Network Settings"), entry("Network Tools")];
+        let found = search(&entries, "network", &State::default(), true, true, 8);
+        assert_eq!(found, vec![1, 0]);
     }
 
     #[test]

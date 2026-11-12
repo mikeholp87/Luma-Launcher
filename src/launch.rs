@@ -28,6 +28,21 @@ fn prepare_log(path: &Path) -> std::io::Result<File> {
     Ok(file)
 }
 
+/// KDE System Settings modules (`kcm_*`) and GNOME Settings panels are
+/// installed as `NoDisplay` desktop entries so menus skip them, but each one
+/// opens a single settings page. Launchers such as KRunner index them so
+/// searching "mouse" or "wifi" jumps straight to the page. `OnlyShowIn` is
+/// honoured, so GNOME panels do not appear on a KDE session.
+pub fn is_settings_module(app: &gio_unix::DesktopAppInfo) -> bool {
+    app.shows_in(None)
+        && (app
+            .string("X-KDE-AliasFor")
+            .is_some_and(|a| a == "systemsettings")
+            || app
+                .categories()
+                .is_some_and(|c| c.split(';').any(|c| c == "X-GNOME-Settings-Panel")))
+}
+
 pub fn desktop(
     app: &gio_unix::DesktopAppInfo,
     context: &gio::AppLaunchContext,

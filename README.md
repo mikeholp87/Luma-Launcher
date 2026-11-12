@@ -144,6 +144,10 @@ and back in afterwards.
 
 - **Application search:** exact, prefix, substring, fuzzy subsequence, acronym,
   keyword, generic-name, and optional description matching.
+- **System settings search:** like KRunner, typing "mouse" or "wifi" finds the
+  matching KDE System Settings module (or GNOME Settings panel on GNOME) and
+  opens that page directly. Settings pages rank after applications that match
+  equally well and are not listed until you type.
 - **Unicode support:** case folding and normalization, including composed and
   decomposed characters.
 - **Native application metadata:** names, descriptions, themed icons, desktop

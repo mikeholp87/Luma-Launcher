@@ -82,13 +82,15 @@ fn discover() -> Vec<Entry> {
     let mut seen = std::collections::BTreeSet::new();
     gio::AppInfo::all()
         .into_iter()
-        .filter(|a| a.should_show())
         .filter_map(|a| {
             let id = a.id()?.to_string();
-            if !seen.insert(id.clone()) {
+            let d = gio_unix::DesktopAppInfo::new(&id);
+            let setting = d
+                .as_ref()
+                .is_some_and(luma_launcher::launch::is_settings_module);
+            if !(a.should_show() || setting) || !seen.insert(id.clone()) {
                 return None;
             }
-            let d = gio_unix::DesktopAppInfo::new(&id);
             let fields = d
                 .as_ref()
                 .map(|d| {
@@ -100,16 +102,22 @@ fn discover() -> Vec<Entry> {
                     )
                 })
                 .unwrap_or_default();
-            Some(Entry::new(
+            let mut description: String = a.description().unwrap_or_default().into();
+            if setting && description.is_empty() {
+                description = "System Settings".into();
+            }
+            let mut entry = Entry::new(
                 id,
                 a.display_name().into(),
-                a.description().unwrap_or_default().into(),
+                description,
                 a.icon()
                     .and_then(|i| gio::prelude::IconExt::to_string(&i))
                     .unwrap_or_default()
                     .into(),
                 fields,
-            ))
+            );
+            entry.setting = setting;
+            Some(entry)
         })
         .collect()
 }
@@ -1361,13 +1369,14 @@ pub fn diagnostics() {
         .map(|(b, p)| format!("{} ({})", b.label(), p.display()))
         .unwrap_or_else(|| "unavailable".into());
     let bus = gio::bus_get_sync(gio::BusType::Session, None::<&gio::Cancellable>).is_ok();
+    let entries = discover();
     let sqlite = if system::sqlite3_available() {
         "found"
     } else {
         "missing (KDE usage import disabled)"
     };
     println!(
-        "Luma {}\nDesktop: {}\nSession: {}\nGTK: {}.{}\nRust: {}\nConfiguration: {}\nShortcut backend: portal registration on explicit setup; desktop-managed fallback\nSession bus: {}\nUsage source: {}\nSQLite CLI (KDE usage): {}\nInstalled applications: {}",
+        "Luma {}\nDesktop: {}\nSession: {}\nGTK: {}.{}\nRust: {}\nConfiguration: {}\nShortcut backend: portal registration on explicit setup; desktop-managed fallback\nSession bus: {}\nUsage source: {}\nSQLite CLI (KDE usage): {}\nInstalled applications: {}\nSettings pages: {}",
         env!("CARGO_PKG_VERSION"),
         std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default(),
         std::env::var("XDG_SESSION_TYPE").unwrap_or_default(),
@@ -1378,7 +1387,8 @@ pub fn diagnostics() {
         if bus { "accessible" } else { "unavailable" },
         usage_source,
         sqlite,
-        discover().len()
+        entries.iter().filter(|e| !e.setting).count(),
+        entries.iter().filter(|e| e.setting).count()
     );
 }
 
