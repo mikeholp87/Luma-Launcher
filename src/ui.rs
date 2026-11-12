@@ -1505,6 +1505,7 @@ mod tests {
                 "hicolor/128x128/apps",
                 "hicolor/64x64/apps",
                 "breeze/apps/48",
+                "breeze/preferences/32",
             ]
             .iter()
             .flat_map(|dir| {
@@ -1581,6 +1582,44 @@ mod tests {
                 )
             })
             .collect();
+        // Real KDE System Settings pages; hidden until a query matches them.
+        let settings = [
+            (
+                "kcm_screenlocker",
+                "Screen Locking",
+                "preferences-desktop-user-password",
+            ),
+            (
+                "kcm_sddm",
+                "Login Screen (SDDM)",
+                "preferences-system-login",
+            ),
+            (
+                "kcm_splashscreen",
+                "Splash Screen",
+                "preferences-system-splash",
+            ),
+            (
+                "kcm_touchscreen",
+                "Touchscreen",
+                "preferences-desktop-touchscreen",
+            ),
+        ];
+        launcher
+            .0
+            .entries
+            .borrow_mut()
+            .extend(settings.iter().map(|(id, name, icon_name)| {
+                let mut entry = Entry::new(
+                    format!("{id}.desktop"),
+                    (*name).into(),
+                    "System Settings".into(),
+                    icon(icon_name),
+                    String::new(),
+                );
+                entry.setting = true;
+                entry
+            }));
         {
             let mut state = launcher.0.state.borrow_mut();
             state.favorites.insert("firefox-esr.desktop".into());
@@ -1630,6 +1669,8 @@ mod tests {
         shoot("dark", "", 6, "palette-dark.png");
         shoot("light", "video", 6, "search-light.png");
         shoot("dark", "= 1920 / 16 * 9", 6, "calculator-dark.png");
+        shoot("light", "screen", 6, "settings-light.png");
+        shoot("dark", "screen", 6, "settings-dark.png");
         launcher.0.window.destroy();
         std::fs::remove_dir_all(root).unwrap();
     }
