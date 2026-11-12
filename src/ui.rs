@@ -1667,8 +1667,6 @@ mod tests {
             launcher.hide();
         };
         shoot("dark", "", 6, "palette-dark.png");
-        shoot("light", "video", 6, "search-light.png");
-        shoot("dark", "= 1920 / 16 * 9", 6, "calculator-dark.png");
         shoot("light", "screen", 6, "settings-light.png");
         shoot("dark", "screen", 6, "settings-dark.png");
         launcher.0.window.destroy();
