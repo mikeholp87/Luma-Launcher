@@ -78,23 +78,26 @@ public sealed class SettingsWindow : Window
         var descriptions = Check("Show descriptions", Value.Descriptions);
         var fuzzy = Check("Fuzzy matching", Value.Fuzzy);
         var clearOnShow = Check("Clear search when opening", Value.ClearOnShow);
+        Heading("Search keywords");
+        Info("One per line: a keyword, then a URL where %s stands for your search. Type the keyword and your search, such as \"g rust\".");
+        var keywords = new TextBox { Text = Core.EnginesToText(Value.SearchEngines), AcceptsReturn = true, AcceptsTab = false, TextWrapping = TextWrapping.Wrap, FontFamily = new FontFamily("Consolas"), MinHeight = 90, MaxHeight = 200, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(6), ToolTip = "Search keywords" };
+        panel.Children.Add(keywords);
         Heading("Personalization");
-        var clear = Button("Clear launch history");
-        bool clearArmed = false;
-        clear.Click += (_, _) =>
+        // A destructive action needs a second click, which lapses after five seconds so a stray click later erases nothing.
+        void Destructive(System.Windows.Controls.Button button, string title, string confirm, Action<Settings> change)
         {
-            if (!clearArmed) { clearArmed = true; clear.Content = "Click again to clear history"; return; }
-            var candidate = Core.Copy(Value); candidate.Usage.Clear();
-            if (Commit(candidate)) { clearArmed = false; clear.Content = "Clear launch history"; }
-        };
-        var reset = Button("Reset personalization");
-        bool resetArmed = false;
-        reset.Click += (_, _) =>
-        {
-            if (!resetArmed) { resetArmed = true; reset.Content = "Click again to reset personalization"; return; }
-            var candidate = Core.Copy(Value); candidate.Usage.Clear(); candidate.Favorites.Clear();
-            if (Commit(candidate)) { resetArmed = false; reset.Content = "Reset personalization"; }
-        };
+            var lapse = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+            void Disarm() { lapse.Stop(); button.Content = title; }
+            lapse.Tick += (_, _) => Disarm();
+            button.Click += (_, _) =>
+            {
+                if (!lapse.IsEnabled) { button.Content = "Click again to " + confirm; lapse.Start(); return; }
+                var candidate = Core.Copy(Value); change(candidate);
+                if (Commit(candidate)) Disarm();
+            };
+        }
+        Destructive(Button("Clear launch history"), "Clear launch history", "clear history", s => s.Usage.Clear());
+        Destructive(Button("Reset personalization"), "Reset personalization", "reset personalization", s => { s.Usage.Clear(); s.Favorites.Clear(); });
         Heading("Startup");
         var startup = Check("Start Luma when I sign in", Value.StartAtLogin);
         Info("Windows handles global shortcuts directly. Ctrl+Enter opens Windows application actions. Ranking uses launches recorded by Luma.");
@@ -118,6 +121,21 @@ public sealed class SettingsWindow : Window
         AutoField(accent, s => s.Accent, (s, v) => s.Accent = v);
         AutoField(shortcut, s => s.Hotkey, (s, v) => s.Hotkey = v);
         AutoField(settingsShortcut, s => s.SettingsHotkey, (s, v) => s.SettingsHotkey = v);
+        // Invalid text stays in the box so it can be corrected instead of being thrown away.
+        bool ApplyKeywords()
+        {
+            try
+            {
+                var engines = Core.EnginesFromText(keywords.Text);
+                if (engines.Count == Value.SearchEngines.Count && engines.All(e => Value.SearchEngines.TryGetValue(e.Key, out var t) && t == e.Value)) return true;
+                var candidate = Core.Copy(Value); candidate.SearchEngines = engines;
+                if (!Commit(candidate)) return false;
+                keywords.Text = Core.EnginesToText(candidate.SearchEngines); error.Text = "Search keywords saved."; return true;
+            }
+            catch (Exception ex) { error.Text = ex.Message + "; search keywords not saved."; return false; }
+        }
+        pending.Add(ApplyKeywords);
+        keywords.LostFocus += (_, _) => { if (!closing && IsVisible) ApplyKeywords(); };
         void AutoCheck(CheckBox check, Func<Settings, bool> read, Action<Settings, bool> write)
         {
             check.Click += (_, _) =>
@@ -149,6 +167,8 @@ public sealed class SettingsWindow : Window
             candidate.Hotkey = shortcut.Text; candidate.SettingsHotkey = settingsShortcut.Text; candidate.Compact = compact.IsChecked == true; candidate.ShowSettingsButton = showSettings.IsChecked == true;
             candidate.History = history.IsChecked == true; candidate.Descriptions = descriptions.IsChecked == true; candidate.Fuzzy = fuzzy.IsChecked == true;
             candidate.ClearOnShow = clearOnShow.IsChecked == true; candidate.StartAtLogin = startup.IsChecked == true;
+            try { candidate.SearchEngines = Core.EnginesFromText(keywords.Text); }
+            catch (FormatException ex) { error.Text = ex.Message + "; search keywords not saved."; return; }
             if (Commit(candidate)) { closing = true; DialogResult = true; }
         };
         var cancel = Button("Close");

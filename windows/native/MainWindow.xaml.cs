@@ -148,11 +148,11 @@ public partial class MainWindow : Window
             try { string value = Core.Calculate(text[1..]); results.Add(new Result(value, "Press Enter to copy result", "calculation", value)); }
             catch { note = "Enter a valid arithmetic expression"; }
         }
-        else if (Core.WebUrl(text) is string url) results.Add(new Result("Open web search or URL", url, "url", url));
+        else if (Core.WebUrl(text, settings) is string url) results.Add(new Result("Open web search or URL", url, "url", url));
         else foreach (var app in Core.Search(entries, text, settings))
         {
             bool favorite = settings.Favorites.Contains(app.Path);
-            var item = new Result((favorite ? "★  " : "") + app.Name, settings.Descriptions ? app.Description : "", "app", app.Path, favorite);
+            var item = new Result((favorite ? "★  " : "") + app.Name, settings.Descriptions ? app.Description : "", app.Setting ? "setting" : "app", app.Path, favorite);
             results.Add(item);
             LoadIcon(item);
         }
@@ -235,7 +235,7 @@ public partial class MainWindow : Window
         if (action == PaletteAction.Actions) { OpenActions(); e.Handled = true; return; }
         if (action == PaletteAction.Jump)
         {
-            if (index < Results.Items.Count && Results.Items[index] is Result { Kind: "app" }) { Results.SelectedIndex = index; OpenSelected(); }
+            if (index < Results.Items.Count && Results.Items[index] is Result { Kind: "app" or "setting" }) { Results.SelectedIndex = index; OpenSelected(); }
             e.Handled = true; return;
         }
         if (action is PaletteAction.Favorite or PaletteAction.Forget && Results.SelectedItem is Result { Kind: "app" } app && writable)

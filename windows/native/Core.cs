@@ -25,18 +25,24 @@ public sealed class Settings
     public bool StartAtLogin { get; set; }
     public string Hotkey { get; set; } = "Ctrl+Alt+Space";
     public string SettingsHotkey { get; set; } = "Ctrl+Alt+S";
+    public Dictionary<string, string> SearchEngines { get; set; } = Core.DefaultEngines();
     public HashSet<string> Favorites { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, Usage> Usage { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public void Validate()
     {
         if (Theme is not ("Dark" or "Light" or "System") || !Regex.IsMatch(Accent ?? "", "^#[0-9a-fA-F]{6}$") || Width is < 360 or > 1200 || Results is < 1 or > 20 || FontSize is < 12 or > 32 || Favorites is null || Usage is null || !HotkeyParser.TryParse(Hotkey, out uint launcherModifiers, out uint launcherKey) || !HotkeyParser.TryParse(SettingsHotkey, out uint settingsModifiers, out uint settingsKey))
             throw new InvalidDataException("Invalid settings. Check theme, accent, sizes, and shortcut.");
+        if (SearchEngines is null || SearchEngines.Count > 32) throw new InvalidDataException("At most 32 search keywords.");
+        foreach (var (keyword, template) in SearchEngines)
+            if (keyword.EnumerateRunes().Count() is < 1 or > 16 || keyword.StartsWith('=') || keyword.Any(c => char.IsWhiteSpace(c) || char.IsControl(c)) || template is null || template.Length > 512 || !template.Contains("%s") || Core.SearchUrl(template, "test") is null)
+                throw new InvalidDataException($"Invalid search keyword \"{keyword}\": use a short word and an http(s) URL containing %s.");
         if (launcherModifiers == settingsModifiers && launcherKey == settingsKey)
             throw new InvalidDataException("Choose different shortcuts for the launcher and Settings.");
     }
 }
 public sealed class Usage { public long Count { get; set; } public long Last { get; set; } }
-public sealed record Entry(string Name, string Path, string Description = "", string Fields = "");
+/// <param name="Setting">A Windows Settings page rather than an application: hidden from the empty view and ranked after equally good applications.</param>
+public sealed record Entry(string Name, string Path, string Description = "", string Fields = "", bool Setting = false);
 public sealed class Result(string name, string detail, string kind, string value, bool favorite = false) : INotifyPropertyChanged
 {
     public string Name { get; } = name;
@@ -58,6 +64,7 @@ public static class Core
     public static Settings Copy(Settings settings) => Normalize(JsonSerializer.Deserialize<Settings>(JsonSerializer.Serialize(settings))!);
     private static Settings Normalize(Settings settings)
     {
+        settings.SearchEngines = new Dictionary<string, string>(settings.SearchEngines ?? throw new InvalidDataException("Invalid search keywords."), StringComparer.Ordinal);
         settings.Validate();
         settings.Favorites = new HashSet<string>(settings.Favorites, StringComparer.OrdinalIgnoreCase);
         settings.Usage = new Dictionary<string, Usage>(settings.Usage, StringComparer.OrdinalIgnoreCase);
@@ -98,12 +105,62 @@ public static class Core
             foreach (var path in Directory.EnumerateFiles(root, "*.lnk", options))
                 yield return ShellMetadata.Read(path, root);
         }
+        foreach (var (name, uri, keywords) in SettingsPages)
+            yield return new Entry(name, uri, "Windows Settings", keywords, true);
     }
+    // ms-settings: pages. Found by searching ("wifi", "bluetooth") but never listed by default.
+    internal static readonly (string Name, string Uri, string Keywords)[] SettingsPages =
+    [
+        ("Display", "ms-settings:display", "screen resolution brightness monitor night light scale"),
+        ("Sound", "ms-settings:sound", "audio volume speaker microphone output input"),
+        ("Notifications", "ms-settings:notifications", "alerts focus do not disturb"),
+        ("Power & battery", "ms-settings:powersleep", "sleep screen timeout energy saver"),
+        ("Storage", "ms-settings:storagesense", "disk space cleanup drives"),
+        ("Bluetooth & devices", "ms-settings:bluetooth", "pair wireless"),
+        ("Printers & scanners", "ms-settings:printers", "printer scanner"),
+        ("Mouse", "ms-settings:mouse", "pointer cursor scroll buttons"),
+        ("Touchpad", "ms-settings:devices-touchpad", "gestures trackpad"),
+        ("Typing", "ms-settings:typing", "autocorrect spelling keyboard"),
+        ("Network & internet", "ms-settings:network", "connection status"),
+        ("Wi-Fi", "ms-settings:network-wifi", "wifi wireless network"),
+        ("Ethernet", "ms-settings:network-ethernet", "wired network"),
+        ("VPN", "ms-settings:network-vpn", "virtual private network"),
+        ("Proxy", "ms-settings:network-proxy", "network proxy"),
+        ("Airplane mode", "ms-settings:network-airplanemode", "flight radio"),
+        ("Mobile hotspot", "ms-settings:network-mobilehotspot", "tethering share internet"),
+        ("Personalization", "ms-settings:personalization", "theme appearance"),
+        ("Background", "ms-settings:personalization-background", "wallpaper desktop picture"),
+        ("Colors", "ms-settings:personalization-colors", "dark mode light mode accent"),
+        ("Lock screen", "ms-settings:lockscreen", "login screen"),
+        ("Taskbar", "ms-settings:taskbar", "start menu tray"),
+        ("Themes", "ms-settings:themes", "personalization"),
+        ("Fonts", "ms-settings:fonts", "typeface"),
+        ("Apps & features", "ms-settings:appsfeatures", "installed programs uninstall"),
+        ("Default apps", "ms-settings:defaultapps", "file associations browser"),
+        ("Startup apps", "ms-settings:startupapps", "autostart login boot"),
+        ("Accounts", "ms-settings:yourinfo", "user profile"),
+        ("Sign-in options", "ms-settings:signinoptions", "password pin windows hello fingerprint"),
+        ("Email & accounts", "ms-settings:emailandaccounts", "mail calendar"),
+        ("Date & time", "ms-settings:dateandtime", "clock time zone"),
+        ("Language & region", "ms-settings:regionlanguage", "keyboard layout locale"),
+        ("Accessibility", "ms-settings:easeofaccess", "ease of access narrator magnifier"),
+        ("Privacy & security", "ms-settings:privacy", "permissions camera microphone location"),
+        ("Windows Update", "ms-settings:windowsupdate", "updates upgrade patches"),
+        ("Windows Security", "windowsdefender:", "antivirus defender firewall virus"),
+        ("Gaming", "ms-settings:gaming-gamebar", "game bar game mode"),
+        ("About", "ms-settings:about", "this pc device name specifications version"),
+        ("Clipboard", "ms-settings:clipboard", "history paste"),
+        ("Multitasking", "ms-settings:multitasking", "snap windows virtual desktops"),
+        ("Recovery", "ms-settings:recovery", "reset this pc restore"),
+        ("Troubleshoot", "ms-settings:troubleshoot", "fix problems"),
+    ];
     internal static string NormalizeSearch(string text) => UnicodeSearch.Normalize(text);
     public static IEnumerable<Entry> Search(IEnumerable<Entry> entries, string query, Settings s)
     {
         if (query.EnumerateRunes().Count() > 512 || query.Contains('\0')) return Array.Empty<Entry>();
         string q = NormalizeSearch(query.Trim());
+        // Dozens of settings pages would otherwise fill the default view.
+        if (q.Length == 0) entries = entries.Where(e => !e.Setting);
         (int Tier, int Spread) Rank(Entry e)
         {
             string n = NormalizeSearch(e.Name);
@@ -126,26 +183,72 @@ public static class Core
         }
         return entries.Select(e => new { Entry = e, Rank = Rank(e), Favorite = s.Favorites.Contains(e.Path), Use = s.Usage.GetValueOrDefault(e.Path) })
             .Where(x => x.Rank.Tier >= 0).OrderByDescending(x => x.Rank.Tier).ThenBy(x => x.Rank.Spread).ThenByDescending(x => x.Favorite)
-            .ThenByDescending(x => (long)(2 * Math.Log(1.0 + Math.Max(0, x.Use?.Count ?? 0)))).ThenByDescending(x => x.Use?.Last ?? 0)
+            .ThenByDescending(x => (long)(2 * Math.Log(1.0 + Math.Max(0, x.Use?.Count ?? 0)))).ThenByDescending(x => x.Use?.Last ?? 0).ThenBy(x => x.Entry.Setting)
             .ThenBy(x => NormalizeSearch(x.Entry.Name), StringComparer.Ordinal).ThenBy(x => x.Entry.Path, StringComparer.OrdinalIgnoreCase).Take(s.Results).Select(x => x.Entry).ToArray();
     }
-    public static string? WebUrl(string text)
+    public static Dictionary<string, string> DefaultEngines() => new() { ["g"] = "https://www.google.com/search?q=%s", ["ddg"] = "https://duckduckgo.com/?q=%s" };
+    /// <summary>One "keyword URL" pair per line, as edited in Settings.</summary>
+    public static string EnginesToText(Dictionary<string, string> engines) => string.Concat(engines.OrderBy(e => e.Key, StringComparer.Ordinal).Select(e => $"{e.Key} {e.Value}\n"));
+    public static Dictionary<string, string> EnginesFromText(string text)
+    {
+        var engines = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (string line in text.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0))
+        {
+            int split = line.IndexOfAny([' ', '\t']);
+            if (split < 0) throw new FormatException($"\"{line}\" needs a keyword and a URL");
+            string keyword = line[..split];
+            if (!engines.TryAdd(keyword, line[split..].Trim())) throw new FormatException($"\"{keyword}\" is listed twice");
+        }
+        return engines;
+    }
+    public static bool IsApplicationQuery(string query, Settings s) => !query.TrimStart().StartsWith('=') && WebUrl(query.Trim(), s) is null;
+    /// <summary>Terms are percent-encoded (%20 for spaces) so templates may use them in a path or a query.</summary>
+    public static string? SearchUrl(string template, string terms)
+    {
+        var encoded = new StringBuilder();
+        foreach (byte b in Encoding.UTF8.GetBytes(terms))
+            if (b < 128 && (char.IsAsciiLetterOrDigit((char)b) || "-_.~".Contains((char)b))) encoded.Append((char)b); else encoded.Append($"%{b:X2}");
+        return Uri.TryCreate(template.Replace("%s", encoded.ToString()), UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) && !string.IsNullOrEmpty(uri.Host) && !template.Any(char.IsControl) ? uri.AbsoluteUri : null;
+    }
+    public static string? WebUrl(string text, Settings s)
     {
         text = text.Trim();
-        foreach (var (prefix, url) in new[] { ("g ", "https://www.google.com/search?q="), ("ddg ", "https://duckduckgo.com/?q=") })
-            if (text.StartsWith(prefix, StringComparison.Ordinal) && text[prefix.Length..].Trim().Length > 0) return url + Uri.EscapeDataString(text[prefix.Length..].Trim());
-        string host = text.Split('/', '?', '#')[0];
-        string[] tlds = ["com", "org", "net", "io", "dev", "app", "ai", "edu", "gov"];
-        if (!text.Contains("://") && host.All(c => c < 128 && !char.IsWhiteSpace(c)) && !host.Contains('@') && !host.Contains(':') && host.Contains('.') && tlds.Contains(host.Split('.')[^1], StringComparer.OrdinalIgnoreCase)) text = "https://" + text;
-        return Uri.TryCreate(text, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) && !string.IsNullOrEmpty(uri.Host) && string.IsNullOrEmpty(uri.UserInfo) && !text.Any(char.IsControl) ? uri.AbsoluteUri : null;
+        int split = text.IndexOfAny([' ', '\t']);
+        if (split > 0 && s.SearchEngines.TryGetValue(text[..split], out var template) && text[split..].Trim() is { Length: > 0 } terms) return SearchUrl(template, terms);
+        string? scheme = BareAddressScheme(text);
+        if (scheme is not null) text = scheme + "://" + text;
+        return Uri.TryCreate(text, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) && !string.IsNullOrEmpty(uri.Host) && string.IsNullOrEmpty(uri.UserInfo) && !text.Any(c => char.IsControl(c) || char.IsWhiteSpace(c)) ? uri.AbsoluteUri : null;
     }
+    // "github.com/rust-lang" or "localhost:3000". Only well-known TLDs qualify so file names stay searches;
+    // local development servers get plain HTTP.
+    private static string? BareAddressScheme(string text)
+    {
+        if (text.Contains("://")) return null;
+        string authority = text.Split('/', '?', '#')[0];
+        string host = authority, port = "";
+        int colon = authority.IndexOf(':');
+        if (colon >= 0) { host = authority[..colon]; port = authority[(colon + 1)..]; }
+        if (!host.All(c => c < 128) || host.Contains('@') || host.Contains(' ') || colon >= 0 && (port.Length is < 1 or > 5 || !port.All(char.IsAsciiDigit))) return null;
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || host == "127.0.0.1") return colon >= 0 ? "http" : null;
+        string[] tlds = ["com", "org", "net", "io", "dev", "app", "ai", "edu", "gov"];
+        int dot = host.LastIndexOf('.');
+        return dot > 0 && tlds.Contains(host[(dot + 1)..], StringComparer.OrdinalIgnoreCase) ? "https" : null;
+    }
+    /// <summary>Calculator text for the expression after "=", with an optional "in hex", "in bin" or "in dec" suffix.</summary>
     public static string Calculate(string expression)
     {
-        return FormatNumber(ArithmeticParser.Calculate(expression));
+        string trimmed = expression.TrimEnd(); string baseName = "dec";
+        int at = trimmed.LastIndexOf(" in ", StringComparison.Ordinal);
+        if (at >= 0 && trimmed[(at + 4)..].Trim() is "hex" or "bin" or "dec") { baseName = trimmed[(at + 4)..].Trim(); expression = trimmed[..at]; }
+        double v = ArithmeticParser.Calculate(expression);
+        if (baseName == "dec") return FormatNumber(v);
+        if (Math.Truncate(v) != v || Math.Abs(v) > 9007199254740992.0) throw new FormatException("Only whole numbers convert to hex or binary");
+        ulong n = (ulong)Math.Abs(v); string sign = v < 0 ? "-" : "";
+        return baseName == "hex" ? $"{sign}0x{n:x}" : $"{sign}0b{Convert.ToString((long)n, 2)}";
     }
     internal static string FormatNumber(double value)
     {
-        string text = value == 0 ? "0" : Math.Abs(value) >= 1e15 ? value.ToString("0.##########e0", CultureInfo.InvariantCulture) : value.ToString("0.##########", CultureInfo.InvariantCulture);
+        string text = Math.Abs(value) >= 1e15 ? value.ToString("0.##########e0", CultureInfo.InvariantCulture) : value.ToString("0.##########", CultureInfo.InvariantCulture);
         return text == "-0" ? "0" : text; // Tiny negatives round to "-0".
     }
     public static bool SelfTest()
@@ -159,10 +262,10 @@ public static class Core
             s.Favorites.Add("b");
             var items = new[] { new Entry("Code", "a"), new Entry("Code Editor", "b") };
             if (Search(items, "code", s).First().Path != "a" || Search(items, "", s).First().Path != "b") return false;
-            if (Calculate("(250 + 75) * 2") != "650" || WebUrl("javascript:alert(1)") != null || WebUrl("https://user:pass@example.com") != null) return false;
+            if (Calculate("(250 + 75) * 2") != "650" || WebUrl("javascript:alert(1)", s) != null || WebUrl("https://user:pass@example.com", s) != null) return false;
             try { Calculate("1/0"); return false; } catch (FormatException) { } catch (DivideByZeroException) { }
             try { Calculate(new string('(', 25) + "1" + new string(')', 25)); return false; } catch (FormatException) { }
-            if (WebUrl("ddg rust & gtk") != "https://duckduckgo.com/?q=rust%20%26%20gtk") return false;
+            if (WebUrl("ddg rust & gtk", s) !="https://duckduckgo.com/?q=rust%20%26%20gtk") return false;
             if (!HotkeyParser.TryParse("Ctrl+Alt+Space", out _, out _) || HotkeyParser.TryParse("Space", out _, out _)) return false;
             if (HotkeyParser.TryParse("Ctrl+Alt+999", out _, out _) || HotkeyParser.TryParse("Ctrl+Alt+5", out _, out _) || !HotkeyParser.TryParse("Ctrl+Alt+D5", out _, out _)) return false;
             if (Calculate("-0.00000000001") != "0") return false;

@@ -43,7 +43,7 @@ scales search, result names, descriptions, footer and icons.
 The palette opens centered in the usable area of the monitor containing the
 pointer and stays centered as results or appearance settings change its size.
 
-Use `= (250 + 75) * 2` for arithmetic, `g terms` or `ddg terms` for web search,
+Use `= (250 + 75) * 2` for arithmetic (also `^`, `%`, `sqrt()`, `0xff`, `255 in hex`), `g terms` or `ddg terms` for web search (more keywords are editable in Settings),
 an explicit HTTP/HTTPS URL, or a bare domain such as `github.com/rust-lang`.
 Bare domains accept `.com .org .net .io .dev .app .ai .edu .gov`; filenames and
 ordinary app IDs remain searches. URL credentials and executable schemes are

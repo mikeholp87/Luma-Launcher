@@ -47,3 +47,15 @@ Unicode data comes from the Unicode Consortium's
 [`CaseFolding.txt`](https://github.com/unicode-org/unicodetools/blob/main/unicodetools/data/ucd/17.0.0/CaseFolding.txt),
 blob `a0b0f07fd64598e698fc7da3e55ca72077dd6071`, under
 [`native/Unicode/LICENSE`](native/Unicode/LICENSE).
+
+## Update: Linux v0.1.4 (`e66154d`)
+
+| Linux feature/update | Windows implementation |
+|---|---|
+| Custom search keywords (`keyword URL` with `%s`), defaults `g` and `ddg` | Ported: `SearchEngines` setting, Settings text box, same validation (32 max, 16-char keyword, http(s) only) |
+| Calculator: `^`, postfix `%`, `pi`/`e`, `sqrt abs round floor ceil ln log sin cos tan`, `0x`/`0b` literals | Ported in `ArithmeticParser` |
+| Calculator `in hex` / `in bin` / `in dec` | Ported |
+| `host:port` and `localhost:3000` open without a scheme | Ported |
+| System Settings page search (hidden by default, ranked after apps) | Windows `ms-settings:` pages, indexed as `Setting` entries |
+| Destructive confirmation lapses after 5 seconds | Ported |
+| KDE usage fix, GNOME/KDE settings modules, autostart-after-upgrade, GTK focus-loss workaround, apt packaging, project site | Linux-only |

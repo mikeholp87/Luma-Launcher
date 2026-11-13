@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows.Input;
 
 namespace Luma;
@@ -37,9 +38,50 @@ internal static class PortChecks
             try { Core.Calculate(invalid); throw new Exception("Unsafe or unbounded expression accepted: " + invalid); }
             catch (FormatException) { }
         }
-        Check(Core.WebUrl("github.com/rust-lang") == "https://github.com/rust-lang", "Bare domains must use HTTPS.");
-        foreach (string invalid in new[] { "org.gnome.Nautilus", "notes.md", "firefox", "a b.com", "user@site.com", "javascript:alert(1)", "https://user:pass@example.com" })
-            Check(Core.WebUrl(invalid) is null, "Application queries or unsafe URLs must not become URLs: " + invalid);
+        // Calculator upgrades shared with Linux: powers, percentages, functions, literals and base conversion.
+        foreach (var (input, expected) in new[] { ("2^10", "1024"), ("-2^2", "-4"), ("2^3^2", "512"), ("2^-1", "0.5"), ("(1 + 1) ^ 3 * 2", "16"),
+            ("50%", "0.5"), ("200 + 10%", "220"), ("200 - 10%", "180"), ("200 * 10%", "20"), ("80 + 50% + 50%", "180"),
+            ("sqrt(16) + abs(-2)", "6"), ("round(2.5) + floor(1.9) + ceil(1.1)", "6"), ("log(1000) + ln(e)", "4"), ("cos(0) + sin(0)", "1"), ("0xff + 0b101", "260"),
+            ("2 * pi", "6.2831853072"), (" 255 in hex", "0xff"), ("-10 in bin", "-0b1010"), ("0xff in dec", "255") })
+            Check(Core.Calculate(input) == expected, "Calculator result failed: " + input + " = " + Core.Calculate(input));
+        foreach (string invalid in new[] { "2 ^", "5 % 3", "sqrt 4", "foo(1)", "sqrt(-1)", "0b12", "1.5 in hex", "2 in base64" })
+        {
+            try { Core.Calculate(invalid); throw new Exception("Invalid expression accepted: " + invalid); }
+            catch (FormatException) { }
+        }
+        // Search keywords.
+        var defaults = new Settings();
+        Check(Core.WebUrl("github.com/rust-lang", defaults) == "https://github.com/rust-lang", "Bare domains must use HTTPS.");
+        Check(Core.WebUrl("ddg rust & gtk", defaults) == "https://duckduckgo.com/?q=rust%20%26%20gtk", "Default keywords must work.");
+        var custom = new Settings(); custom.SearchEngines["w"] = "https://en.wikipedia.org/wiki/%s";
+        Check(Core.WebUrl("w Rust (language)", custom) == "https://en.wikipedia.org/wiki/Rust%20%28language%29", "Custom keywords must fill their template.");
+        Check(Core.WebUrl("g  a/b?c#d ", custom) == "https://www.google.com/search?q=a%2Fb%3Fc%23d", "Terms must be percent-encoded.");
+        custom.SearchEngines.Remove("g");
+        Check(Core.WebUrl("g linux", custom) is null && Core.WebUrl("w", custom) is null && Core.WebUrl("w   ", custom) is null, "Removed or empty keywords must not match.");
+        Check(Core.SearchUrl("javascript:%s", "alert(1)") is null, "Non-HTTP keyword templates must be refused.");
+        Check(Core.EnginesFromText(Core.EnginesToText(Core.DefaultEngines())).OrderBy(e => e.Key).SequenceEqual(Core.DefaultEngines().OrderBy(e => e.Key)), "Keyword text must round-trip.");
+        Check(Core.EnginesFromText("\n  gh\thttps://github.com/search?q=%s  \n\n")["gh"] == "https://github.com/search?q=%s" && Core.EnginesFromText("").Count == 0, "Keyword text must tolerate whitespace.");
+        foreach (string text in new[] { "gh", "g https://a.com/%s\ng https://b.com/%s" })
+        {
+            try { Core.EnginesFromText(text); throw new Exception("Invalid keyword text accepted: " + text); } catch (FormatException) { }
+        }
+        foreach (var (keyword, template) in new[] { ("", "https://example.com/?q=%s"), ("two words", "https://example.com/?q=%s"), ("=calc", "https://example.com/?q=%s"), ("averyveryverylongkeyword", "https://example.com/?q=%s"), ("x", "https://example.com/"), ("x", "javascript:alert(%s)"), ("x", "file:///etc/%s") })
+        {
+            var bad = new Settings(); bad.SearchEngines[keyword] = template;
+            try { bad.Validate(); throw new Exception("Invalid keyword accepted: " + keyword + " " + template); } catch (InvalidDataException) { }
+        }
+        var tooMany = new Settings { SearchEngines = Enumerable.Range(0, 33).ToDictionary(i => "k" + i, _ => "https://example.com/?q=%s") };
+        try { tooMany.Validate(); throw new Exception("More than 32 keywords accepted."); } catch (InvalidDataException) { }
+        Check(Core.WebUrl("example.com:8080/a", defaults) == "https://example.com:8080/a" && Core.WebUrl("localhost:3000", defaults) == "http://localhost:3000/" && Core.WebUrl("127.0.0.1:8000/x", defaults) == "http://127.0.0.1:8000/x", "Host and port must open without a scheme.");
+        Check(!Core.IsApplicationQuery("g linux", defaults) && !Core.IsApplicationQuery(" = 2+2", defaults) && Core.IsApplicationQuery("Calculator", defaults), "Tool queries must not select applications.");
+        foreach (string invalid in new[] { "org.gnome.Nautilus", "notes.md", "firefox", "a b.com", "user@site.com", "javascript:alert(1)", "https://user:pass@example.com", "localhost", "mailto:me@example.com", "ftp://example.com", "example.com:port", "example.com:123456", "notes.md:12" })
+            Check(Core.WebUrl(invalid, defaults) is null, "Application queries or unsafe URLs must not become URLs: " + invalid);
+        // Settings pages are searchable but not listed by default and rank after equal applications.
+        var pages = new[] { new Entry("Mousepad", "1"), new Entry("Mouse", "ms-settings:mouse", "", "", true), new Entry("About", "ms-settings:about", "", "", true) };
+        Check(Core.Search(pages, "", defaults).Select(x => x.Path).SequenceEqual(["1"]), "The empty view must list applications only.");
+        Check(Core.Search(pages, "mouse", defaults).Select(x => x.Path).SequenceEqual(["ms-settings:mouse", "1"]), "Settings pages must be searchable.");
+        Check(Core.Search([new Entry("Network Settings", "s", "", "", true), new Entry("Network Tools", "a")], "network", defaults).First().Path == "a", "Applications must rank before equal settings pages.");
+        Check(Core.Discover().Any(e => e.Setting), "Settings pages must be indexed.");
         foreach (Key key in new[] { Key.J, Key.N }) Check(KeyboardCommands.Resolve(key, true).Action == PaletteAction.Next, "Next shortcut missing.");
         foreach (Key key in new[] { Key.K, Key.P }) Check(KeyboardCommands.Resolve(key, true).Action == PaletteAction.Previous, "Previous shortcut missing.");
         foreach (Key key in new[] { Key.OemComma, Key.OemPlus, Key.Add }) Check(KeyboardCommands.Resolve(key, true).Action == PaletteAction.Settings, "Settings shortcut missing.");
