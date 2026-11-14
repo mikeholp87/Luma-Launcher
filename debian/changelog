@@ -1,3 +1,9 @@
+luma-launcher (0.1.5) unstable; urgency=medium
+
+  * Windows: add a per-user Inno Setup installer, published for winget.
+
+ -- Mike Holp <mikeholp87@gmail.com>  Sat, 14 Nov 2026 12:00:00 +0700
+
 luma-launcher (0.1.4) unstable; urgency=medium
 
   * Search system settings pages like KRunner: typing "mouse" or "wifi"

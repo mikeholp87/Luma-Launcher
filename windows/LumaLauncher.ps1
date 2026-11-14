@@ -4,7 +4,7 @@
     [switch]$Version
 )
 
-if ($Version) { Write-Output 'Luma Launcher 0.1.0 (Windows)'; exit 0 }
+if ($Version) { Write-Output 'Luma Launcher 0.1.5 (Windows)'; exit 0 }
 if ($Toggle -and $Background) { Write-Error 'Choose either -Toggle or -Background.'; exit 2 }
 if ($PSVersionTable.PSEdition -ne 'Desktop') {
     Write-Error 'Run this application with Windows PowerShell 5.1.'

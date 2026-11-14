@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>LumaLauncher</AssemblyName>
+    <Version>0.1.5</Version>
     <ApplicationIcon>Assets\LumaLauncher.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
