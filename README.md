@@ -1,5 +1,7 @@
 # Luma Launcher
 
+[![Latest release](https://img.shields.io/github/v/release/mikeholp87/Luma-Launcher)](https://github.com/mikeholp87/Luma-Launcher/releases/latest) [![License: MIT](https://img.shields.io/github/license/mikeholp87/Luma-Launcher)](LICENSE) [![Stars](https://img.shields.io/github/stars/mikeholp87/Luma-Launcher?style=flat)](https://github.com/mikeholp87/Luma-Launcher/stargazers) ![apt install luma-launcher](https://img.shields.io/badge/apt%20install-luma--launcher-A81D33?logo=debian&logoColor=white)
+
 <img src="assets/io.github.luma_launcher.LumaLauncher.svg" alt="Luma Launcher icon" width="88" height="88">
 
 **A keyboard-driven application launcher for Linux and Windows.**
