@@ -17,10 +17,10 @@ public partial class App : Application
         try { command = ResidentCommands.Parse(e.Args); }
         catch (ArgumentException ex) { Console.Error.WriteLine(ex.Message); Shutdown(2); return; }
         if (command == "--help") { Console.WriteLine("LumaLauncher " + string.Join(" | ", ResidentCommands.Supported)); Shutdown(); return; }
-        if (command == "--version") { Console.WriteLine("Luma Launcher 0.1.0 (Windows)"); Shutdown(); return; }
+        if (command == "--version") { Console.WriteLine("Luma Launcher 0.1.5 (Windows)"); Shutdown(); return; }
         if (command == "--diagnostics")
         {
-            Console.WriteLine($"Luma Launcher 0.1.0 (Windows)\nOS: {Environment.OSVersion}\n.NET: {Environment.Version}\nExecutable: {Environment.ProcessPath}\nSettings: {Core.DataPath}\nApplications: {Core.Discover().Count()}\nUsage source: Luma launch history\nShortcuts: Windows RegisterHotKey");
+            Console.WriteLine($"Luma Launcher 0.1.5 (Windows)\nOS: {Environment.OSVersion}\n.NET: {Environment.Version}\nExecutable: {Environment.ProcessPath}\nSettings: {Core.DataPath}\nApplications: {Core.Discover().Count()}\nUsage source: Luma launch history\nShortcuts: Windows RegisterHotKey");
             Shutdown(); return;
         }
         if (command == "--self-test")
