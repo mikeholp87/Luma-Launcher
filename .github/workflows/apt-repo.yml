@@ -13,6 +13,7 @@ on:
   pull_request:
     paths:
       - .github/workflows/apt-repo.yml
+      - scripts/stamp-site.sh
       - scripts/build-apt-repo.sh
       - scripts/test-apt-repo.sh
       - packaging/apt/**
@@ -71,6 +72,10 @@ jobs:
           cp -r site _site
           cp assets/io.github.luma_launcher.LumaLauncher.svg _site/luma-launcher-icon.svg
           mv apt _site/apt
+      - name: Stamp version and release date
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/stamp-site.sh _site/index.html
       - uses: actions/upload-pages-artifact@v3
   deploy:
     needs: build
