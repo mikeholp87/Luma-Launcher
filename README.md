@@ -591,3 +591,7 @@ notes are in [AGENTS.md](AGENTS.md).
 ## License
 
 Luma Launcher is available under the [MIT License](LICENSE).
+
+## Author
+
+Built by [Mike Holp](https://www.ai-automation-station.com/about.html) with AI coding tools. See the build video on [AI Automation Station](https://www.ai-automation-station.com/watch/V0PoYhOprBI), and more projects at [github.com/mikeholp87](https://github.com/mikeholp87).
