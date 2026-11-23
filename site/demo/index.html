@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Try Luma Launcher: Interactive Linux App Launcher Demo</title>
+    <meta
+      name="description"
+      content="Try the Luma Launcher palette in your browser. Type to search sample apps with fuzzy matching, run a quick calculation, pin favorites and use web search keywords."
+    />
+    <link rel="canonical" href="https://mikeholp87.github.io/Luma-Launcher/demo/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Try Luma Launcher in your browser" />
+    <meta property="og:url" content="https://mikeholp87.github.io/Luma-Launcher/demo/" />
+    <meta property="og:image" content="https://mikeholp87.github.io/Luma-Launcher/assets/og.png" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #edeff5;
+        --paper: #fff;
+        --ink: #14161f;
+        --muted: #4b5167;
+        --line: #d9ddea;
+        --blue: #4350e0;
+        --on-blue: #fff;
+        --warn-bg: #fff4d6;
+        --warn-ink: #5c4200;
+        font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0f1117;
+          --paper: #171a23;
+          --ink: #eef0f7;
+          --muted: #a9afc4;
+          --line: #2a2f3d;
+          --blue: #8b95ff;
+          --on-blue: #0f1117;
+          --warn-bg: #2d2610;
+          --warn-ink: #f4d98a;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        line-height: 1.55;
+      }
+      a {
+        color: var(--blue);
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 20px;
+        align-items: center;
+        justify-content: space-between;
+        max-width: 1040px;
+        margin: 0 auto;
+        padding: 16px;
+      }
+      header strong {
+        font-size: 18px;
+      }
+      header nav {
+        display: flex;
+        gap: 16px;
+        font-size: 15px;
+      }
+      .notice {
+        max-width: 1040px;
+        margin: 0 auto 8px;
+        padding: 10px 16px;
+        border-radius: 10px;
+        background: var(--warn-bg);
+        color: var(--warn-ink);
+        font-size: 14px;
+      }
+      main {
+        max-width: 1040px;
+        margin: 0 auto;
+        padding: 8px 16px 48px;
+        display: grid;
+        grid-template-columns: minmax(0, 680px) minmax(220px, 1fr);
+        gap: 32px;
+        align-items: start;
+      }
+      @media (max-width: 860px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+      }
+      h1 {
+        grid-column: 1 / -1;
+        margin: 8px 0 0;
+        font-size: clamp(26px, 4vw, 36px);
+        letter-spacing: -0.02em;
+      }
+      .lede {
+        grid-column: 1 / -1;
+        margin: 0;
+        color: var(--muted);
+      }
+
+      /* The palette, themed like the app */
+      .palette {
+        --p-bg: #1f2230;
+        --p-ink: #f1f2f8;
+        --p-muted: #9aa0b8;
+        --p-line: #3a3f55;
+        --p-sel: #353c5c;
+        --p-accent: #8b95ff;
+        --p-field: #1f2230;
+        background: var(--p-bg);
+        color: var(--p-ink);
+        border: 1px solid var(--p-line);
+        border-radius: 14px;
+        box-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.55);
+        overflow: hidden;
+      }
+      .palette.light {
+        --p-bg: #fafafc;
+        --p-ink: #1a1c26;
+        --p-muted: #5d6479;
+        --p-line: #d4d8e6;
+        --p-sel: #dfe4fb;
+        --p-accent: #4350e0;
+        --p-field: #fff;
+      }
+      .field {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 8px;
+        padding: 6px 14px;
+        border: 2px solid var(--p-muted);
+        border-radius: 12px;
+        background: var(--p-field);
+      }
+      .field:focus-within {
+        border-color: var(--p-accent);
+      }
+      .field input {
+        flex: 1;
+        min-width: 0;
+        padding: 8px 0;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        font-size: 20px;
+      }
+      .field input::placeholder {
+        color: var(--p-muted);
+      }
+      .results {
+        list-style: none;
+        margin: 0;
+        padding: 6px 8px;
+        border-top: 1px solid var(--p-line);
+        border-bottom: 1px solid var(--p-line);
+        min-height: 120px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 9px 12px;
+        border-radius: 10px;
+        border-left: 4px solid transparent;
+        cursor: pointer;
+      }
+      .row[aria-selected="true"] {
+        background: var(--p-sel);
+        border-left-color: var(--p-accent);
+      }
+      .icon {
+        flex: none;
+        width: 36px;
+        height: 36px;
+        border-radius: 9px;
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        font-size: 15px;
+        color: #fff;
+      }
+      .text {
+        min-width: 0;
+      }
+      .name {
+        font-weight: 650;
+      }
+      .desc {
+        color: var(--p-muted);
+        font-size: 13px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .num {
+        margin-left: auto;
+        color: var(--p-muted);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      .empty {
+        padding: 28px 12px;
+        text-align: center;
+        color: var(--p-muted);
+      }
+      .foot {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 16px;
+        padding: 10px 16px;
+        font-size: 13px;
+        color: var(--p-muted);
+      }
+      .bar {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+        flex-wrap: wrap;
+      }
+      button.small {
+        font: inherit;
+        font-size: 14px;
+        padding: 6px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: var(--paper);
+        color: var(--ink);
+        cursor: pointer;
+      }
+      button.small:hover {
+        border-color: var(--blue);
+      }
+      #toast {
+        min-height: 24px;
+        margin-top: 10px;
+        font-size: 14px;
+        color: var(--muted);
+      }
+      aside {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 16px 18px;
+      }
+      aside h2 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+      aside ul {
+        margin: 0;
+        padding-left: 18px;
+        font-size: 14px;
+      }
+      aside li {
+        margin: 6px 0;
+      }
+      kbd,
+      code {
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 12.5px;
+        padding: 1px 5px;
+        border-radius: 5px;
+        background: var(--bg);
+        border: 1px solid var(--line);
+      }
+      .cta {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .cta a {
+        padding: 10px 18px;
+        border-radius: 10px;
+        font-weight: 650;
+        text-decoration: none;
+        background: var(--blue);
+        color: var(--on-blue);
+      }
+      .cta a.secondary {
+        background: transparent;
+        color: var(--blue);
+        border: 1px solid var(--blue);
+      }
+      .sr {
+        position: absolute;
+        left: -9999px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>Luma Launcher</strong>
+      <nav aria-label="Demo navigation">
+        <a href="../">Overview</a>
+        <a href="../#install">Install</a>
+        <a href="https://github.com/mikeholp87/Luma-Launcher">GitHub</a>
+      </nav>
+    </header>
+    <div class="notice" role="note">
+      This is a browser demo with sample apps. It cannot open anything on your computer, and nothing you type leaves this page.
+    </div>
+    <main>
+      <h1>Try the Luma palette</h1>
+      <p class="lede">
+        Type a few letters, use the arrow keys and press Enter. Search is forgiving, so <code>vsc</code> finds Visual Studio Code.
+      </p>
+
+      <section aria-label="Luma Launcher demo">
+        <div class="palette" id="palette">
+          <label class="field">
+            <span class="sr">Search applications</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="11" cy="11" r="7"></circle>
+              <path d="m20 20-3.5-3.5"></path>
+            </svg>
+            <input id="q" type="text" autocomplete="off" spellcheck="false" placeholder="Search applications…" aria-controls="list" aria-autocomplete="list" />
+          </label>
+          <ul class="results" id="list" role="listbox" aria-label="Results"></ul>
+          <div class="foot" aria-hidden="true">
+            <span>↑↓ Navigate</span><span>Enter Open</span><span>Ctrl+D Pin</span><span>Ctrl+Enter Actions</span><span>Ctrl+1–9 Jump</span><span>Esc Clear</span>
+          </div>
+        </div>
+        <div class="bar">
+          <button class="small" id="theme" type="button">Switch to light palette</button>
+          <button class="small" id="reset" type="button">Reset demo</button>
+        </div>
+        <div id="toast" role="status" aria-live="polite"></div>
+      </section>
+
+      <aside aria-label="Things to try">
+        <h2>Things to try</h2>
+        <ul>
+          <li>Press <kbd>Ctrl</kbd>+<kbd>D</kbd> to pin an app as a favorite.</li>
+          <li>Open an app a few times. The ones you use most move up.</li>
+          <li>Type <code>= 1920 / 16 * 9</code> or <code>= 200 + 15%</code>.</li>
+          <li>Type <code>g linux launcher</code> or <code>gh luma</code> to search the web.</li>
+          <li>Type <code>screen</code> to find System Settings pages.</li>
+          <li>Type <code>localhost:3000</code> to open an address.</li>
+          <li>Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> on an app for its actions.</li>
+        </ul>
+      </aside>
+
+      <div class="cta">
+        <a href="../#install">Install Luma Launcher on Linux</a>
+        <a class="secondary" href="../">Back to the overview</a>
+      </div>
+    </main>
+
+    <script>
+      "use strict";
+      const COLORS = ["#e0561f", "#2f6fd6", "#1f9d73", "#8a4fd0", "#c2385a", "#3a8fa3", "#b9801b", "#5a6b7d"];
+      // [id, name, description, search fields, actions]
+      const APPS = [
+        ["firefox", "Firefox", "Browse the World Wide Web", "web browser internet", ["New Window", "New Private Window"]],
+        ["kdenlive", "Kdenlive", "Video Editor", "video editing film", ["New Project"]],
+        ["dolphin", "Dolphin", "File Manager", "files folders explorer", ["New Window", "Open Home Folder"]],
+        ["calculator", "Calculator", "Perform arithmetic, scientific or financial calculations", "math", []],
+        ["obs", "OBS Studio", "Free and Open Source Streaming/Recording Software", "stream record broadcast", ["Start Recording"]],
+        ["vlc", "VLC media player", "Read, capture, broadcast your multimedia streams", "video audio music", []],
+        ["blender", "Blender", "3D modeling, animation, rendering and post-production", "3d graphics", []],
+        ["code", "Visual Studio Code", "Code editing. Redefined.", "editor programming ide", ["New Empty Window"]],
+        ["konsole", "Konsole", "Terminal emulator", "terminal shell command line", ["New Tab"]],
+        ["spectacle", "Spectacle", "Screenshot Capture Utility", "screenshot screen capture", ["Capture Full Screen", "Capture Rectangular Region"]],
+        ["gimp", "GIMP", "Create images and edit photographs", "photo image editor", []],
+        ["writer", "LibreOffice Writer", "Create and edit text documents", "word document office", []],
+        ["okular", "Okular", "Document Viewer", "pdf reader", []],
+        ["kate", "Kate", "Advanced text editor", "notes text", ["New Document"]],
+        ["thunderbird", "Thunderbird", "Send and receive mail with Thunderbird", "email mail", ["Compose New Message"]],
+        ["steam", "Steam", "Application for managing and playing games on Steam", "games", []],
+        ["inkscape", "Inkscape", "Vector Graphics Editor", "svg drawing", []],
+        ["monitor", "System Monitor", "Monitor system resources and processes", "task manager cpu memory", []],
+      ].map(([id, name, description, fields, actions], i) => ({ id, name, description, fields, actions, color: COLORS[i % COLORS.length], type: "app" }));
+
+      const SETTINGS = [
+        ["screenlocker", "Screen Locking", "System Settings"],
+        ["sddm", "Login Screen (SDDM)", "System Settings"],
+        ["splash", "Splash Screen", "System Settings"],
+        ["touchscreen", "Touchscreen", "System Settings"],
+        ["display", "Display and Monitor", "System Settings"],
+        ["wifi", "Wi-Fi and Internet", "System Settings"],
+      ].map(([id, name, description]) => ({ id: "kcm_" + id, name, description, fields: "", actions: [], color: "#5a6b7d", type: "setting" }));
+
+      const KEYWORDS = { g: ["Google", "https://www.google.com/search?q="], ddg: ["DuckDuckGo", "https://duckduckgo.com/?q="], gh: ["GitHub", "https://github.com/search?q="] };
+
+      const DEFAULTS = { favorites: ["firefox"], usage: { firefox: 40, kdenlive: 25, dolphin: 9, calculator: 31, obs: 18, vlc: 12, blender: 6, code: 20 } };
+      const state = JSON.parse(JSON.stringify(DEFAULTS));
+      try {
+        const saved = JSON.parse(localStorage.getItem("luma-demo") || "null");
+        if (saved && Array.isArray(saved.favorites) && saved.usage) Object.assign(state, saved);
+      } catch {}
+      const save = () => {
+        try {
+          localStorage.setItem("luma-demo", JSON.stringify(state));
+        } catch {}
+      };
+
+      const $ = (id) => document.getElementById(id);
+      const input = $("q");
+      const list = $("list");
+      const toast = $("toast");
+      let items = [];
+      let sel = 0;
+      let showActions = null;
+
+      // ---- calculator: a small parser, never eval ----
+      function calc(src) {
+        let hex = false;
+        let text = src.trim().replace(/\s+in\s+hex$/i, () => ((hex = true), ""));
+        const tokens = text.match(/\d+\.?\d*|[a-z]+|[-+*/^()%]/gi);
+        if (!tokens || tokens.join("").length < text.replace(/\s/g, "").length) throw new Error("bad");
+        let i = 0;
+        const peek = () => tokens[i];
+        const next = () => tokens[i++];
+        function expr() {
+          let v = term();
+          while (peek() === "+" || peek() === "-") {
+            const op = next();
+            const t = term();
+            // "200 + 15%" adds a percentage of the left side
+            if (t && t.pct !== undefined) v = op === "+" ? v + (v * t.pct) / 100 : v - (v * t.pct) / 100;
+            else v = op === "+" ? v + t : v - t;
+          }
+          return v;
+        }
+        function term() {
+          let v = power();
+          while (peek() === "*" || peek() === "/") {
+            const op = next();
+            const r = power();
+            v = op === "*" ? v * unp(r) : v / unp(r);
+          }
+          return v;
+        }
+        const unp = (r) => (r && r.pct !== undefined ? r.pct / 100 : r);
+        function power() {
+          const b = unary();
+          if (peek() === "^") {
+            next();
+            return Math.pow(unp(b), unp(power()));
+          }
+          return b;
+        }
+        function unary() {
+          if (peek() === "-") {
+            next();
+            return -unp(unary());
+          }
+          if (peek() === "+") {
+            next();
+            return unary();
+          }
+          return atom();
+        }
+        function atom() {
+          const t = next();
+          if (t === undefined) throw new Error("bad");
+          if (t === "(") {
+            const v = expr();
+            if (next() !== ")") throw new Error("bad");
+            return v;
+          }
+          if (/^\d/.test(t)) {
+            const n = parseFloat(t);
+            if (peek() === "%") {
+              next();
+              return { pct: n };
+            }
+            return n;
+          }
+          if (t.toLowerCase() === "pi") return Math.PI;
+          if (t.toLowerCase() === "sqrt") {
+            if (next() !== "(") throw new Error("bad");
+            const v = expr();
+            if (next() !== ")") throw new Error("bad");
+            return Math.sqrt(unp(v));
+          }
+          throw new Error("bad");
+        }
+        let v = expr();
+        if (i !== tokens.length) throw new Error("bad");
+        v = unp(v);
+        if (!Number.isFinite(v)) throw new Error("bad");
+        v = Math.round(v * 1e10) / 1e10;
+        return hex ? "0x" + Math.trunc(v).toString(16).toUpperCase() : String(v);
+      }
+
+      // ---- matching: prefix, word start, acronym, substring, fuzzy ----
+      function score(item, q) {
+        const name = item.name.toLowerCase();
+        const words = name.split(/[\s().-]+/).filter(Boolean);
+        if (name === q) return 100;
+        if (name.startsWith(q)) return 90;
+        if (words.some((w) => w.startsWith(q))) return 80;
+        if (words.map((w) => w[0]).join("").startsWith(q)) return 75;
+        if (name.includes(q)) return 60;
+        if (item.fields.includes(q)) return 50;
+        if (item.description.toLowerCase().includes(q)) return 40;
+        let k = 0;
+        for (const c of name) if (c === q[k]) k++;
+        return k === q.length ? 30 : 0;
+      }
+
+      function build() {
+        const raw = input.value;
+        const q = raw.trim().toLowerCase();
+        showActions = null;
+        if (q.startsWith("=")) {
+          try {
+            const r = calc(raw.trim().slice(1));
+            return [{ type: "calc", name: r, description: "Calculation result. Press Enter to copy", color: "#1f9d73", mark: "=", result: r, fields: "", actions: [] }];
+          } catch {
+            return [{ type: "note", name: "Keep typing…", description: "Try = 1920 / 16 * 9", color: "#5a6b7d", mark: "=", fields: "", actions: [] }];
+          }
+        }
+        const kw = q.match(/^(\S+)\s+(.+)$/);
+        if (kw && KEYWORDS[kw[1]]) {
+          const [label, base] = KEYWORDS[kw[1]];
+          return [{ type: "web", name: `Search ${label} for “${kw[2]}”`, description: base + encodeURIComponent(kw[2]), color: "#2f6fd6", mark: "↗", fields: "", actions: [] }];
+        }
+        if (/^(localhost|\d{1,3}(\.\d{1,3}){3})(:\d+)?(\/\S*)?$/.test(q) || /^https?:\/\/\S+$/.test(q)) {
+          return [{ type: "web", name: `Open ${raw.trim()}`, description: "Address", color: "#2f6fd6", mark: "↗", fields: "", actions: [] }];
+        }
+        const all = [...APPS, ...SETTINGS];
+        if (!q) {
+          const fav = new Set(state.favorites);
+          return APPS.filter((a) => fav.has(a.id) || state.usage[a.id])
+            .sort((a, b) => fav.has(b.id) - fav.has(a.id) || (state.usage[b.id] || 0) - (state.usage[a.id] || 0))
+            .slice(0, 6);
+        }
+        return all
+          .map((a) => [a, score(a, q)])
+          .filter(([a, s]) => s > 0 && (a.type === "app" || a.name.toLowerCase().includes(q) || a.fields.includes(q)))
+          .sort((x, y) => y[1] - x[1] || (state.usage[y[0].id] || 0) - (state.usage[x[0].id] || 0) || x[0].name.localeCompare(y[0].name))
+          .slice(0, 6)
+          .map(([a]) => a);
+      }
+
+      function render() {
+        items = build();
+        sel = Math.min(sel, Math.max(items.length - 1, 0));
+        list.innerHTML = "";
+        if (showActions) {
+          items = showActions.actions.map((a) => ({ type: "action", name: a, description: showActions.name, color: showActions.color, mark: "›", fields: "", actions: [], parent: showActions }));
+        }
+        if (!items.length) {
+          const li = document.createElement("li");
+          li.className = "empty";
+          li.textContent = "No matches. Try another name.";
+          list.append(li);
+          return;
+        }
+        items.forEach((it, i) => {
+          const li = document.createElement("li");
+          li.className = "row";
+          li.id = "r" + i;
+          li.setAttribute("role", "option");
+          li.setAttribute("aria-selected", String(i === sel));
+          const fav = it.type === "app" && state.favorites.includes(it.id) ? "★ " : "";
+          const icon = document.createElement("div");
+          icon.className = "icon";
+          icon.style.background = it.color;
+          icon.textContent = it.mark || it.name.replace(/[^A-Za-z]/g, "").slice(0, 1).toUpperCase();
+          const text = document.createElement("div");
+          text.className = "text";
+          const n = document.createElement("div");
+          n.className = "name";
+          n.textContent = fav + it.name;
+          const d = document.createElement("div");
+          d.className = "desc";
+          d.textContent = it.description;
+          text.append(n, d);
+          li.append(icon, text);
+          if (i < 9 && it.type !== "calc") {
+            const k = document.createElement("div");
+            k.className = "num";
+            k.textContent = "Ctrl+" + (i + 1);
+            li.append(k);
+          }
+          li.addEventListener("mousedown", (e) => e.preventDefault());
+          li.addEventListener("click", () => {
+            sel = i;
+            activate(it);
+          });
+          list.append(li);
+        });
+        input.setAttribute("aria-activedescendant", "r" + sel);
+      }
+
+      function say(msg) {
+        toast.textContent = msg;
+      }
+
+      function activate(it) {
+        if (!it) return;
+        if (it.type === "calc") {
+          navigator.clipboard?.writeText(it.result).catch(() => {});
+          say(`Copied ${it.result} to the clipboard. The real app copies the result and closes.`);
+        } else if (it.type === "web") {
+          say(`The real app would open ${it.description} in your browser. This demo stays here.`);
+        } else if (it.type === "action") {
+          say(`The real app would run “${it.name}” from ${it.parent.name}'s desktop entry.`);
+        } else if (it.type === "app" || it.type === "setting") {
+          if (it.type === "app") {
+            state.usage[it.id] = (state.usage[it.id] || 0) + 1;
+            save();
+          }
+          say(`The real app would open ${it.name} now. ${it.type === "app" ? "Luma counted that launch, so it ranks higher next time." : ""}`);
+        }
+        input.value = "";
+        sel = 0;
+        render();
+      }
+
+      input.addEventListener("input", () => {
+        sel = 0;
+        render();
+      });
+      input.addEventListener("keydown", (e) => {
+        const move = (d) => {
+          e.preventDefault();
+          if (items.length) sel = (sel + d + items.length) % items.length;
+          render();
+        };
+        if (e.key === "ArrowDown" || (e.ctrlKey && e.key.toLowerCase() === "j")) return move(1);
+        if (e.key === "ArrowUp" || (e.ctrlKey && e.key.toLowerCase() === "k")) return move(-1);
+        if (e.key === "Escape") {
+          e.preventDefault();
+          if (showActions) showActions = null;
+          else input.value = "";
+          sel = 0;
+          return render();
+        }
+        if (e.ctrlKey && e.key.toLowerCase() === "d") {
+          e.preventDefault();
+          const it = items[sel];
+          if (it && it.type === "app") {
+            const at = state.favorites.indexOf(it.id);
+            if (at >= 0) state.favorites.splice(at, 1);
+            else state.favorites.push(it.id);
+            save();
+            say(at >= 0 ? `${it.name} unpinned.` : `${it.name} pinned as a favorite.`);
+            render();
+          }
+          return;
+        }
+        if (e.ctrlKey && e.key === "Enter") {
+          e.preventDefault();
+          const it = items[sel];
+          if (it && it.type === "app") {
+            if (!it.actions.length) say(`${it.name} has no extra desktop actions.`);
+            else {
+              showActions = it;
+              sel = 0;
+              render();
+            }
+          }
+          return;
+        }
+        if (e.ctrlKey && /^[1-9]$/.test(e.key)) {
+          e.preventDefault();
+          return activate(items[+e.key - 1]);
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          activate(items[sel]);
+        }
+      });
+
+      $("theme").addEventListener("click", () => {
+        const light = $("palette").classList.toggle("light");
+        $("theme").textContent = light ? "Switch to dark palette" : "Switch to light palette";
+      });
+      $("reset").addEventListener("click", () => {
+        Object.assign(state, JSON.parse(JSON.stringify(DEFAULTS)));
+        save();
+        input.value = "";
+        sel = 0;
+        say("Demo reset.");
+        render();
+        input.focus();
+      });
+
+      render();
+      input.focus({ preventScroll: true });
+    </script>
+  </body>
+</html>
