@@ -509,7 +509,7 @@ impl Launcher {
         let len = text.chars().count();
         let grew = len > self.0.typed_len.replace(len);
         self.render();
-        if grew && self.0.input.position() == len as i32 {
+        if grew && self.0.config.borrow().autocomplete && self.0.input.position() == len as i32 {
             self.complete(&text, len);
         }
     }
@@ -1134,6 +1134,7 @@ impl Launcher {
             ("Toggle system app usage", "system_usage"),
             ("Toggle descriptions", "descriptions"),
             ("Toggle fuzzy matching", "fuzzy"),
+            ("Toggle autocomplete", "autocomplete"),
             ("Toggle clear search on opening", "clear"),
             ("Clear launch history", "erase"),
             ("Reset personalization", "reset"),
@@ -1156,6 +1157,7 @@ impl Launcher {
                     "system_usage" => Some(cfg.system_usage),
                     "descriptions" => Some(cfg.descriptions),
                     "fuzzy" => Some(cfg.fuzzy),
+                    "autocomplete" => Some(cfg.autocomplete),
                     "clear" => Some(cfg.clear_on_show),
                     _ => None,
                 }
@@ -1345,6 +1347,7 @@ impl Launcher {
             "system_usage" => cfg.system_usage = !cfg.system_usage,
             "descriptions" => cfg.descriptions = !cfg.descriptions,
             "fuzzy" => cfg.fuzzy = !cfg.fuzzy,
+            "autocomplete" => cfg.autocomplete = !cfg.autocomplete,
             "clear" => cfg.clear_on_show = !cfg.clear_on_show,
             "erase" => self.0.state.borrow_mut().usage.clear(),
             "reset" => *self.0.state.borrow_mut() = State::default(),
@@ -1452,6 +1455,7 @@ fn setting_text(title: &str, key: &str, cfg: &Config) -> String {
         "system_usage" => cfg.system_usage,
         "descriptions" => cfg.descriptions,
         "fuzzy" => cfg.fuzzy,
+        "autocomplete" => cfg.autocomplete,
         "clear" => cfg.clear_on_show,
         _ => return title.to_owned(),
     };
@@ -2099,6 +2103,15 @@ mod tests {
         );
         ui.set("fuzzy matching", true);
 
+        // Autocomplete is saved and switchable; its behaviour is checked in
+        // `autocomplete_and_highlighting`.
+        assert!(launcher.0.config.borrow().autocomplete, "on by default");
+        ui.set("autocomplete", false);
+        assert!(!saved(root).autocomplete);
+        assert!(!launcher.0.config.borrow().autocomplete);
+        ui.set("autocomplete", true);
+        assert!(saved(root).autocomplete);
+
         // Clear search on opening.
         launcher.0.input.set_text("abc");
         launcher.hide();
@@ -2372,6 +2385,21 @@ mod tests {
                 "{open}V</span>isual {open}S</span>tudio {open}C</span>ode"
             )]
         );
+
+        // Switched off in Settings: nothing is suggested, matches are still marked.
+        launcher.0.config.borrow_mut().autocomplete = false;
+        input.set_text("");
+        for c in ["f", "i", "r"] {
+            key(c);
+        }
+        assert_eq!(input.text(), "fir");
+        assert_eq!(input.selection_bounds(), None);
+        assert!(!launcher.accept_completion());
+        assert_eq!(
+            row_labels(launcher, "result-name"),
+            [format!("{open}Fir</span>efox")]
+        );
+        launcher.0.config.borrow_mut().autocomplete = true;
         input.set_text("");
     }
 
