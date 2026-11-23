@@ -1,3 +1,16 @@
+luma-launcher (0.1.6) unstable; urgency=medium
+
+  * Autocomplete as you type: the rest of the top result's name appears
+    after your text, selected. Tab or Right accepts it, typing replaces it
+    and Backspace drops it. It completes only names that start with what you
+    typed. Turn it off with the Autocomplete checkbox in Settings.
+  * The letters that matched your search are shown in bold with an accent
+    tint in result names and descriptions, including fuzzy and acronym
+    matches.
+  * Updated the url dependency to fix RUSTSEC-2026-0592.
+
+ -- Mike Holp <mikeholp87@gmail.com>  Mon, 23 Nov 2026 09:30:27 +0700
+
 luma-launcher (0.1.5) unstable; urgency=medium
 
   * Windows: add a per-user Inno Setup installer, published for winget.
