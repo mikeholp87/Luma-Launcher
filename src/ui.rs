@@ -173,6 +173,14 @@ struct Inner {
     color_scheme_watch: Rc<RefCell<Option<gio::SignalSubscription>>>,
     portal_pending: Cell<bool>,
     portal: RefCell<Option<crate::portal::Session>>,
+    /// Chars the user has typed, which stays put while an inline completion
+    /// is selected after them. A longer text than this is typing; a shorter
+    /// or equal one is a deletion or edit, which never completes.
+    typed_len: Cell<usize>,
+    /// Char index where the selected inline completion starts, while one is shown.
+    completion: Cell<Option<usize>>,
+    /// Set while the launcher itself edits the entry, so `changed` is ignored.
+    completing: Cell<bool>,
 }
 
 fn config_path() -> std::path::PathBuf {
@@ -336,6 +344,9 @@ impl Launcher {
             color_scheme_watch: Rc::new(RefCell::new(None)),
             portal_pending: Cell::new(false),
             portal: RefCell::new(None),
+            typed_len: Cell::new(0),
+            completion: Cell::new(None),
+            completing: Cell::new(false),
         }));
         if let Some(settings) = &this.0.theme_settings {
             settings.connect_changed(
@@ -367,7 +378,7 @@ impl Launcher {
         input.connect_changed(clone!(
             #[weak(rename_to = t)]
             this,
-            move |_| t.render()
+            move |_| t.typed()
         ));
         input.connect_activate(clone!(
             #[weak(rename_to = t)]
@@ -425,6 +436,19 @@ impl Launcher {
             glib::Propagation::Proceed,
             move |_, key, _, mods| {
                 let ctrl = mods.contains(gdk::ModifierType::CONTROL_MASK);
+                // Tab or Right accepts a shown completion; otherwise both
+                // keep their usual job (Right moves the cursor).
+                let plain = !mods.intersects(
+                    gdk::ModifierType::CONTROL_MASK
+                        | gdk::ModifierType::ALT_MASK
+                        | gdk::ModifierType::SHIFT_MASK,
+                );
+                if plain
+                    && matches!(key, gdk::Key::Tab | gdk::Key::Right | gdk::Key::KP_Right)
+                    && t.accept_completion()
+                {
+                    return glib::Propagation::Stop;
+                }
                 let Some(action) = shortcut(key, ctrl) else {
                     return glib::Propagation::Proceed;
                 };
@@ -460,8 +484,68 @@ impl Launcher {
         }
         this
     }
+    /// What the user has typed: the entry's text without a selected inline
+    /// completion, which is only a suggestion until accepted.
     fn query(&self) -> String {
-        self.0.input.text().to_string()
+        let text = self.0.input.text().to_string();
+        match self.0.completion.get() {
+            Some(start)
+                if self.0.input.selection_bounds()
+                    == Some((start as i32, text.chars().count() as i32)) =>
+            {
+                text.chars().take(start).collect()
+            }
+            _ => text,
+        }
+    }
+    /// The entry's text changed: re-run the search, and when the user just
+    /// typed at the end of the text, complete it with the top result's name.
+    fn typed(&self) {
+        if self.0.completing.get() {
+            return;
+        }
+        self.0.completion.set(None);
+        let text = self.0.input.text().to_string();
+        let len = text.chars().count();
+        let grew = len > self.0.typed_len.replace(len);
+        self.render();
+        if grew && self.0.config.borrow().autocomplete && self.0.input.position() == len as i32 {
+            self.complete(&text, len);
+        }
+    }
+    /// Append the rest of the top result's name after `typed` as selected
+    /// text: typing on replaces it, Backspace removes it, Tab or Right accepts it.
+    fn complete(&self, typed: &str, typed_len: usize) {
+        let rest = {
+            let entries = self.0.entries.borrow();
+            let results = self.0.results.borrow();
+            results
+                .first()
+                .and_then(|&i| search::completion(&entries[i], typed))
+        };
+        let Some(rest) = rest else {
+            return;
+        };
+        self.0.completing.set(true);
+        self.0.input.insert_text(&rest, &mut (typed_len as i32));
+        self.0.completing.set(false);
+        self.0.input.select_region(typed_len as i32, -1);
+        self.0.completion.set(Some(typed_len));
+    }
+    /// Keep a shown completion as typed text. False when there is none, so
+    /// the key press carries on as usual.
+    fn accept_completion(&self) -> bool {
+        let Some(start) = self.0.completion.take() else {
+            return false;
+        };
+        let len = self.0.input.text().chars().count();
+        if self.0.input.selection_bounds() != Some((start as i32, len as i32)) {
+            return false;
+        }
+        self.0.input.set_position(-1);
+        self.0.typed_len.set(len);
+        self.render();
+        true
     }
     fn message(&self, s: &str) {
         eprintln!("level=info message={s:?}");
@@ -593,11 +677,25 @@ impl Launcher {
                     .valign(gtk::Align::Center)
                     .build();
                 let favorite = self.0.state.borrow().favorites.contains(&e.id);
-                let name = label(&format!("{}{}", if favorite { "★  " } else { "" }, e.name));
+                let name = label("");
+                name.set_markup(&format!(
+                    "{}{}",
+                    if favorite { "★  " } else { "" },
+                    search::highlighted_markup(
+                        &e.name,
+                        &search::highlight_name(e, q, cfg.fuzzy),
+                        &cfg.accent
+                    )
+                ));
                 name.add_css_class("result-name");
                 text.append(&name);
                 if cfg.descriptions && !e.description.is_empty() {
-                    let desc = label(&e.description);
+                    let desc = label("");
+                    desc.set_markup(&search::highlighted_markup(
+                        &e.description,
+                        &search::highlight_description(e, q),
+                        &cfg.accent,
+                    ));
                     desc.add_css_class("description");
                     text.append(&desc);
                 }
@@ -1036,6 +1134,7 @@ impl Launcher {
             ("Toggle system app usage", "system_usage"),
             ("Toggle descriptions", "descriptions"),
             ("Toggle fuzzy matching", "fuzzy"),
+            ("Toggle autocomplete", "autocomplete"),
             ("Toggle clear search on opening", "clear"),
             ("Clear launch history", "erase"),
             ("Reset personalization", "reset"),
@@ -1058,6 +1157,7 @@ impl Launcher {
                     "system_usage" => Some(cfg.system_usage),
                     "descriptions" => Some(cfg.descriptions),
                     "fuzzy" => Some(cfg.fuzzy),
+                    "autocomplete" => Some(cfg.autocomplete),
                     "clear" => Some(cfg.clear_on_show),
                     _ => None,
                 }
@@ -1247,6 +1347,7 @@ impl Launcher {
             "system_usage" => cfg.system_usage = !cfg.system_usage,
             "descriptions" => cfg.descriptions = !cfg.descriptions,
             "fuzzy" => cfg.fuzzy = !cfg.fuzzy,
+            "autocomplete" => cfg.autocomplete = !cfg.autocomplete,
             "clear" => cfg.clear_on_show = !cfg.clear_on_show,
             "erase" => self.0.state.borrow_mut().usage.clear(),
             "reset" => *self.0.state.borrow_mut() = State::default(),
@@ -1354,6 +1455,7 @@ fn setting_text(title: &str, key: &str, cfg: &Config) -> String {
         "system_usage" => cfg.system_usage,
         "descriptions" => cfg.descriptions,
         "fuzzy" => cfg.fuzzy,
+        "autocomplete" => cfg.autocomplete,
         "clear" => cfg.clear_on_show,
         _ => return title.to_owned(),
     };
@@ -1469,6 +1571,7 @@ mod tests {
         focus_dismissal_and_settings_save_rollback(&launcher, &root);
         every_setting_takes_effect(&launcher, &root);
         window_follows_settings_not_first_showing(&launcher);
+        autocomplete_and_highlighting(&launcher);
         launcher.0.window.destroy();
         std::fs::remove_dir_all(root).unwrap();
     }
@@ -2000,6 +2103,15 @@ mod tests {
         );
         ui.set("fuzzy matching", true);
 
+        // Autocomplete is saved and switchable; its behaviour is checked in
+        // `autocomplete_and_highlighting`.
+        assert!(launcher.0.config.borrow().autocomplete, "on by default");
+        ui.set("autocomplete", false);
+        assert!(!saved(root).autocomplete);
+        assert!(!launcher.0.config.borrow().autocomplete);
+        ui.set("autocomplete", true);
+        assert!(saved(root).autocomplete);
+
         // Clear search on opening.
         launcher.0.input.set_text("abc");
         launcher.hide();
@@ -2155,6 +2267,142 @@ mod tests {
 
     /// The palette is sized from Settings and its current results every time
     /// it is shown, never frozen at whatever the first showing measured.
+    /// Raw label text (Pango markup when highlighted) of rows' labels with `class`.
+    fn row_labels(launcher: &Launcher, class: &str) -> Vec<String> {
+        let mut all = vec![];
+        widgets(launcher.0.list.upcast_ref(), &mut all);
+        all.iter()
+            .filter(|w| w.has_css_class(class))
+            .filter_map(|w| w.downcast_ref::<gtk::Label>())
+            .map(|l| l.label().to_string())
+            .collect()
+    }
+
+    /// Type into the entry the way key presses do (`insert-at-cursor` and
+    /// `backspace` are the actions the keys trigger), then check inline
+    /// autocomplete and the highlighted letters in the results.
+    fn autocomplete_and_highlighting(launcher: &Launcher) {
+        let input = launcher.0.input.clone();
+        let text = input.delegate().expect("entry text widget");
+        // A key press replaces any selection, then inserts at the cursor.
+        let key = |s: &str| {
+            if input.selection_bounds().is_some() {
+                input.delete_selection();
+            }
+            text.emit_by_name::<()>("insert-at-cursor", &[&s]);
+        };
+        let backspace = || text.emit_by_name::<()>("backspace", &[]);
+        *launcher.0.entries.borrow_mut() = vec![
+            app("firefox.desktop", "Firefox", "Browse the web", "internet"),
+            app("files.desktop", "Files", "Browse folders", ""),
+            app("code.desktop", "Visual Studio Code", "", ""),
+            Entry {
+                setting: true,
+                ..app("kcm_screenlocker.desktop", "Screen Locking", "", "")
+            },
+        ];
+        {
+            let mut cfg = launcher.0.config.borrow_mut();
+            cfg.descriptions = true;
+            cfg.fuzzy = true;
+            cfg.accent = "#12abef".into();
+        }
+        launcher.invalidate();
+        input.set_text("");
+
+        // The rest of the top result's name appears as selected text.
+        for c in ["f", "i", "r"] {
+            key(c);
+        }
+        assert_eq!(input.text(), "firefox");
+        assert_eq!(input.selection_bounds(), Some((3, 7)));
+        // What was typed still drives the search; the suggestion does not.
+        assert_eq!(launcher.query(), "fir");
+        assert_eq!(names(launcher), vec!["Firefox"]);
+        // Typing on replaces the suggestion and completes again.
+        key("e");
+        assert_eq!(
+            (input.text().as_str(), launcher.query().as_str()),
+            ("firefox", "fire")
+        );
+        assert_eq!(input.selection_bounds(), Some((4, 7)));
+        // Backspace drops the suggestion, and deleting never completes.
+        backspace();
+        assert_eq!(input.text(), "fire");
+        assert_eq!(input.selection_bounds(), None);
+        backspace();
+        assert_eq!(input.text(), "fir");
+        assert_eq!(input.selection_bounds(), None);
+        // Text that stops matching is left alone.
+        key("z");
+        assert_eq!(input.text(), "firz");
+        assert_eq!(input.selection_bounds(), None);
+        input.set_text("");
+
+        // Accepting keeps the text and searches for all of it.
+        for c in ["f", "i", "r"] {
+            key(c);
+        }
+        assert!(launcher.accept_completion());
+        assert_eq!(input.text(), "firefox");
+        assert_eq!((input.selection_bounds(), input.position()), (None, 7));
+        assert_eq!(launcher.query(), "firefox");
+        assert_eq!(names(launcher), vec!["Firefox"]);
+        assert!(!launcher.accept_completion(), "nothing left to accept");
+        input.set_text("");
+
+        // Matches that are not a name prefix, and settings pages, never rewrite the text.
+        for (typed, shown) in [("studio", "studio"), ("vsc", "vsc"), ("scr", "scr")] {
+            for c in typed.chars() {
+                key(&c.to_string());
+            }
+            assert_eq!(input.text(), shown);
+            assert_eq!(input.selection_bounds(), None, "{typed}");
+            assert!(!launcher.accept_completion(), "{typed}");
+            input.set_text("");
+        }
+
+        // The letters that matched are marked, in names and in descriptions.
+        let open = "<span weight=\"bold\" background=\"#12abef\" background_alpha=\"35%\">";
+        input.set_text("");
+        for c in ["f", "i", "r"] {
+            key(c);
+        }
+        assert!(launcher.accept_completion());
+        assert_eq!(
+            row_labels(launcher, "result-name"),
+            [format!("{open}Firefox</span>")]
+        );
+        input.set_text("web");
+        assert_eq!(
+            row_labels(launcher, "description"),
+            [format!("Browse the {open}web</span>")]
+        );
+        input.set_text("vsc");
+        assert_eq!(
+            row_labels(launcher, "result-name"),
+            [format!(
+                "{open}V</span>isual {open}S</span>tudio {open}C</span>ode"
+            )]
+        );
+
+        // Switched off in Settings: nothing is suggested, matches are still marked.
+        launcher.0.config.borrow_mut().autocomplete = false;
+        input.set_text("");
+        for c in ["f", "i", "r"] {
+            key(c);
+        }
+        assert_eq!(input.text(), "fir");
+        assert_eq!(input.selection_bounds(), None);
+        assert!(!launcher.accept_completion());
+        assert_eq!(
+            row_labels(launcher, "result-name"),
+            [format!("{open}Fir</span>efox")]
+        );
+        launcher.0.config.borrow_mut().autocomplete = true;
+        input.set_text("");
+    }
+
     fn window_follows_settings_not_first_showing(launcher: &Launcher) {
         let window = launcher.0.window.clone();
         let width = launcher.0.config.borrow().width;

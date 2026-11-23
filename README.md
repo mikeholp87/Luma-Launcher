@@ -146,6 +146,12 @@ and back in afterwards.
 
 - **Application search:** exact, prefix, substring, fuzzy subsequence, acronym,
   keyword, generic-name, and optional description matching.
+- **Autocomplete and highlighting:** as you type, the rest of the top result's
+  name appears after your text, selected; press Tab or Right to accept it, keep
+  typing to replace it, or Backspace to drop it. It completes only names that
+  start with what you typed, and can be turned off in Settings. The letters that matched are shown in bold with an
+  accent tint in result names and descriptions, including fuzzy and acronym
+  matches (`vsc` marks the V, S and C in Visual Studio Code).
 - **System settings search:** like KRunner, typing "mouse" or "wifi" finds the
   matching KDE System Settings module (or GNOME Settings panel on GNOME) and
   opens that page directly. Settings pages rank after applications that match
@@ -345,6 +351,7 @@ keystrokes or bypass compositor restrictions. See the dedicated
 |---|---|
 | Configured global shortcut | Toggle Luma through the desktop or portal |
 | Enter | Launch the selected application, open a URL, or copy a calculation |
+| Tab / Right | Accept the autocomplete shown after your text |
 | Escape | Hide the palette |
 | Up / Down | Select the previous or next application |
 | Ctrl+K / Ctrl+J, Ctrl+P / Ctrl+N | Select the previous or next application |
@@ -432,6 +439,7 @@ history = true
 system_usage = true
 descriptions = true
 fuzzy = true
+autocomplete = true
 clear_on_show = true
 portal_shortcut = false
 shortcut = "ALT+space"
